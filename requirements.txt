@@ -19,3 +19,4 @@ json2table==1.1.5
 loguru==0.6.0
 PyYAML==6.0
 einops
+lips-benchmark[recommended]
