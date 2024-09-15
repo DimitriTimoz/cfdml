@@ -2,3 +2,8 @@ env/
 Dataset/
 *.zip
 __pycache__/
+target/
+*.csv
+*.png
+*.svg
+*.jpeg

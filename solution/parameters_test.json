@@ -3,9 +3,9 @@
     "scoringonly": false,
     "simulator_config": {
       "simulator_type": "custom",
-      "simulator_file": "models.basic",
-      "name": "MyBasicSimulator",
-      "model": "BasicSimulator",
+      "simulator_file": "models.test",
+      "name": "MyAugmentedSimulator",
+      "model": "AugmentedSimulator",
       "scaler_type": "None"
      },
     "simulator_extra_parameters": {
