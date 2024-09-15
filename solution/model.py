@@ -86,7 +86,7 @@ class NN(torch.nn.Module):
 
 
 class AugmentedSimulator():
-    def __init__(self,benchmark,**kwargs):
+    def __init__(self, benchmark, **kwargs):
         self.name = "AirfRANSSubmission"
         chunk_sizes=benchmark.train_dataset.get_simulations_sizes()
         scalerParams={"chunk_sizes":chunk_sizes}
