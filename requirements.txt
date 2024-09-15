@@ -20,3 +20,8 @@ loguru==0.6.0
 PyYAML==6.0
 einops
 lips-benchmark[recommended]
+torch-scatter @ https://data.pyg.org/whl/torch-2.0.1+cpu.html
+torch-sparse @ https://data.pyg.org/whl/torch-2.0.1+cpu.html
+torch-cluster @ https://data.pyg.org/whl/torch-2.0.1+cpu.html
+torch-spline-conv @ https://data.pyg.org/whl/torch-2.0.1+cpu.html
+

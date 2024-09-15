@@ -195,7 +195,7 @@ class AugmentedSimulator():
         return processed
 
 
-def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg = 1):
+def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg = 1, local = False):
     model = network.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr = hparams['lr'])
     lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
