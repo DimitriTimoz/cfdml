@@ -15,6 +15,8 @@ from torch_geometric.transforms import BaseTransform
 from scipy.spatial import Delaunay
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 class DelaunayTransform(BaseTransform):
     def __init__(self, dim=2):
         """
@@ -67,26 +69,23 @@ class DelaunayTransform(BaseTransform):
 
 
 class GraphSAGE(torch.nn.Module):
-    def __init__(self, device, in_dim, hidden_dim, out_dim, dropout=0.2):
+    def __init__(self, device, in_dim, hidden_dims: list, out_dim, dropout=0.2):
         super().__init__()
         self.device = device
         self.dropout = dropout
-        self.conv1 = SAGEConv(in_dim, hidden_dim).to(self.device)
-        self.conv2 = SAGEConv(hidden_dim, hidden_dim).to(self.device)
-        self.conv3 = SAGEConv(hidden_dim, out_dim).to(self.device)
+        hidden_dims.append(out_dim)
+        self.convs = nn.ModuleList()
+        for hidden_dim in hidden_dims:
+            self.convs.append(SAGEConv(in_dim, hidden_dim).to(self.device))
+            in_dim = hidden_dim
     
     def forward(self, data: Batch) -> Tensor: 
-        x = self.conv1(data.x.to(self.device), data.edge_index.to(self.device))
-        x = F.elu(x)
-        x = F.dropout(x, p=self.dropout)
-        
-        x = self.conv2(x, data.edge_index)
-        x = F.elu(x)
-        x = F.dropout(x, p=self.dropout)
-        
-        x = self.conv3(x, data.edge_index)
-        x = F.elu(x)
-        x = F.dropout(x, p=self.dropout)
+        x = data.x.to(self.device)
+        edge_index = data.edge_index.to(self.device)
+        for conv in self.convs:
+            x = F.elu(conv(x, edge_index))
+            x = F.dropout(x, p=self.dropout)
+            
         return torch.log_softmax(x, dim=-1)
 
 class BasicSimulator(nn.Module):
@@ -95,7 +94,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = GraphSAGE(self.device, 7, 64, 4)
+        self.model = GraphSAGE(self.device, 7, [64, 128, 128, 64], 4)
         self.hparams = kwargs
         if use_cuda:
             print('Using GPU')
@@ -145,6 +144,8 @@ class BasicSimulator(nn.Module):
         print("Training")
         train_dataset = self.process_dataset(dataset=train_dataset, training=True)
         model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted', local=local)
+        # Save the model
+        torch.save(model, "model.pth")
 
     def predict(self, dataset, **kwargs):
         test_dataset = self.process_dataset(dataset=dataset, training=False)
@@ -209,7 +210,8 @@ def global_train(device, train_dataset: DataLoader, network: GraphSAGE, hparams:
     train_loss_vol_list = []
     loss_surf_var_list = []
     loss_vol_var_list = []
-
+    train_loss_list = []
+    
     pbar_train = tqdm(range(hparams['nb_epochs']), position=0)
     epoch_nb = 0
 
@@ -220,16 +222,26 @@ def global_train(device, train_dataset: DataLoader, network: GraphSAGE, hparams:
         train_loss, _, loss_surf_var, loss_vol_var, loss_surf, loss_vol = train_model(device, model, train_dataset, optimizer, lr_scheduler, criterion, reg=reg)
         if criterion == 'MSE_weighted':
             train_loss = reg * loss_surf + loss_vol
-        del train_loader
-
+        train_loss_list.append(train_loss)
         train_loss_surf_list.append(loss_surf)
         train_loss_vol_list.append(loss_vol)
         loss_surf_var_list.append(loss_surf_var)
         loss_vol_var_list.append(loss_vol_var)
 
+        f = open("losses.txt", "a")
+        f.write("Epoch: " + str(epoch) + " loss: " + str(train_loss) + " loss_surf: " + str(loss_surf) + " loss_vol: " + str(loss_vol) + "\n")
+        f.close()
+        
     loss_surf_var_list = np.array(loss_surf_var_list)
     loss_vol_var_list = np.array(loss_vol_var_list)
 
+    # Plotting the loss
+    plt.plot(train_loss_list, label='Total Loss')
+    plt.plot(train_loss_surf_list, label='Surface Loss')
+    plt.plot(train_loss_vol_list, label='Volume Loss')
+    plt.legend()
+    plt.show()
+    
     return model
     
 
@@ -244,13 +256,13 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
     avg_loss_vol = 0
     iterNum = 0
     print("Train loader: ", train_loader)
+    losses = []
+    start = time.time()
     for data in train_loader:
         data_clone = data.clone()
         data_clone = data_clone.to(device)   
         optimizer.zero_grad()  
-        start = time.time()
         out = model(data_clone)
-        print("Time to forward: ", time.time()-start)
         targets = data_clone.y.to(device)
 
         if criterion == 'MSE' or criterion == 'MSE_weighted':
@@ -266,13 +278,14 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
 
         start = time.time()
         if criterion == 'MSE_weighted':            
-            (loss_vol + reg*loss_surf).backward()           
+            (loss_vol + reg*loss_surf).backward()      
+            losses.append((loss_vol + reg*loss_surf).cpu().data.numpy())     
         else:
             total_loss.backward()
+            losses.append(total_loss.cpu().data.numpy())
         
         optimizer.step()
         scheduler.step()
-        print("Time to backward: ", time.time()-start)
         avg_loss_per_var += loss_per_var
         avg_loss += total_loss
         avg_loss_surf_var += loss_surf_var
@@ -280,6 +293,15 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         avg_loss_surf += loss_surf
         avg_loss_vol += loss_vol 
         iterNum += 1
+    print("Time for epoch: ", time.time()-start)
+    print("Loss: ", avg_loss.cpu().data.numpy()/iterNum)
+
+    fig = plt.figure()
+    plt.plot(losses)
+    plt.savefig("losses.png")
+    plt.show()
+
+    
 
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
             avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum

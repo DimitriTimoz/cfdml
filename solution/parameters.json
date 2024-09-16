@@ -9,15 +9,12 @@
       "scaler_type": "None"
      },
     "simulator_extra_parameters": {
-      "encoder": [7, 64, 64, 8],
-      "decoder": [8, 64, 64, 4],
       "nb_hidden_layers": 3,
       "size_hidden_layers": 64,
       "batch_size": 1,
-      "nb_epochs": 600,
+      "nb_epochs": 60,
       "lr": 0.001,
-      "bn_bool": true,
-      "subsampling": 32000
+      "bn_bool": true
     },
     "training_config": {}
   }
