@@ -14,6 +14,7 @@ from torch_geometric.nn import SAGEConv
 
 from torch_geometric.transforms import BaseTransform
 from scipy.spatial import Delaunay
+from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -84,11 +85,13 @@ class GraphSAGE(torch.nn.Module):
     def forward(self, data: Batch) -> Tensor: 
         x = data.x.to(self.device)
         edge_index = data.edge_index.to(self.device)
-        for conv in self.convs:
+        for conv in self.convs[:-1]:
             x = F.elu(conv(x, edge_index))
             x = F.dropout(x, p=self.dropout)
             
-        return torch.log_softmax(x, dim=-1)
+        x = self.convs[-1](x, edge_index)
+        return x # TODO: choose activation function according to the variable
+            
 
 class BasicSimulator(nn.Module):
     def __init__(self, **kwargs):
@@ -97,7 +100,8 @@ class BasicSimulator(nn.Module):
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
         self.model = GraphSAGE(self.device, 7, [128, 256, 256, 128], 4)
-        #self.scaler = StandardScalerIterative()
+        self.scaler = MinMaxScaler(copy=False)
+        self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
         if use_cuda:
             print('Using GPU')
@@ -115,15 +119,15 @@ class BasicSimulator(nn.Module):
 
         nodes_features, node_labels = dataset.extract_data()
 
-        nodes_features,node_labels=dataset.extract_data()
         if training:
-            print("Normalize train data")
-            #nodes_features, node_labels = self.scaler.fit_transform(nodes_features, node_labels)
-            print("Transform done")
+            print("Scale train data")
+            nodes_features = self.scaler.fit_transform(nodes_features)
+            node_labels = self.target_scaler.fit_transform(node_labels)
         else:
-            print("Normalize not train data")
-            #nodes_features, node_labels = self.scaler.transform(nodes_features, node_labels)
-            print("Transform done")
+            print("Scale not train data")
+            nodes_features = self.scaler.transform(nodes_features)
+            node_labels = self.target_scaler.transform(node_labels)
+        print("Transform done")
 
         transform = DelaunayTransform() 
 
@@ -150,7 +154,7 @@ class BasicSimulator(nn.Module):
             else:
                 break
             start_index += nb_nodes_in_simulation
-        return DataLoader(dataset=torchDataset,batch_size=1)
+        return DataLoader(dataset=torchDataset, batch_size=1)
 
     def train(self, train_dataset, save_path=None, local=False):
         print("Training")
@@ -215,12 +219,11 @@ class BasicSimulator(nn.Module):
         return predictions
     
     def _post_process(self, data):
-        #try:
-        #    processed = self.scaler.inverse_transform(data)
-        #except TypeError:
-        #    processed = self.scaler.inverse_transform(data.cpu())
-        #return processed
-        return data
+        try:
+            processed = self.target_scaler.inverse_transform(data)
+        except TypeError:
+            processed = self.target_scaler.inverse_transform(data.cpu())
+        return processed
 
 
 

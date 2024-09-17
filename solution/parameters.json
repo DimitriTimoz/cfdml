@@ -12,7 +12,7 @@
       "nb_hidden_layers": 3,
       "size_hidden_layers": 64,
       "batch_size": 1,
-      "nb_epochs": 180,
+      "nb_epochs": 4,
       "lr": 0.001,
       "bn_bool": true
     },
