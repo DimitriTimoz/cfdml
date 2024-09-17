@@ -14,7 +14,8 @@ from torch_geometric.nn import SAGEConv
 
 from torch_geometric.transforms import BaseTransform
 from scipy.spatial import Delaunay
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.utils.validation import check_is_fitted
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -100,7 +101,7 @@ class BasicSimulator(nn.Module):
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
         self.model = GraphSAGE(self.device, 7, [128, 256, 256, 128], 4)
-        self.scaler = MinMaxScaler(copy=False)
+        self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
         if use_cuda:
@@ -118,8 +119,14 @@ class BasicSimulator(nn.Module):
         position = np.stack([coord_x,coord_y],axis=1)
 
         nodes_features, node_labels = dataset.extract_data()
-
-        if training:
+        fitted = False
+        try:
+            check_is_fitted(self.scaler)
+            check_is_fitted(self.target_scaler)
+            fitted = True
+        except:
+            pass
+        if training or not fitted:
             print("Scale train data")
             nodes_features = self.scaler.fit_transform(nodes_features)
             node_labels = self.target_scaler.fit_transform(node_labels)
@@ -148,11 +155,9 @@ class BasicSimulator(nn.Module):
                             x=simulation_features, 
                             y=simulation_labels,
                             surf = simulation_surface.bool()) 
-            if i <= 103: # TODO: remove this
+            if i <= 103 or not training:
                 sampleData = transform(sampleData)
                 torchDataset.append(sampleData)
-            else:
-                break
             start_index += nb_nodes_in_simulation
         return DataLoader(dataset=torchDataset, batch_size=1)
 
@@ -172,10 +177,10 @@ class BasicSimulator(nn.Module):
             train_dataset = self.process_dataset(dataset=train_dataset, training=True)
         model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted', local=local)
         # Save the model
-        torch.save(model, "model.pth")
+        torch.save(self, "model.pth")
 
     def predict(self, dataset, **kwargs):
-        test_dataset = self.process_dataset(dataset=dataset, training=False)
+        test_dataset = self.process_dataset(dataset, training=False)
         self.model.eval()
         avg_loss_per_var = np.zeros(4)
         avg_loss = 0
@@ -185,6 +190,7 @@ class BasicSimulator(nn.Module):
         avg_loss_vol = 0
         iterNum = 0
 
+        print("Dataset length: ", len(test_dataset))
         predictions=[]
         with torch.no_grad():
             for data in test_dataset:        

@@ -18,12 +18,15 @@ if not os.path.isdir(DIRECTORY_NAME):
 # %%
 from lips.benchmark.airfransBenchmark import AirfRANSBenchmark
 
+skip_training = True
+skip_loading = False
 benchmark=AirfRANSBenchmark(benchmark_path = DIRECTORY_NAME,
                             config_path = BENCH_CONFIG_PATH,
                             benchmark_name = BENCHMARK_NAME,
                             log_path=LOG_PATH)
-                            
-#benchmark.load(path=DIRECTORY_NAME)
+      
+if not skip_loading:                      
+    benchmark.load(path=DIRECTORY_NAME)
 
 # %%
 import torch
@@ -34,13 +37,18 @@ parameters = json.load(f)
 hparams = parameters["simulator_extra_parameters"]
 
 device = torch.device("cuda:0")
-module = importlib.import_module("solution." + parameters["simulator_config"]["simulator_file"])
-importlib.reload(module)
-Network = getattr(module, parameters["simulator_config"]["model"])
-global_train = getattr(module, "global_train")
-network = Network(**hparams)
-network.train(None,
-             local=True)
+
+network = None
+if not skip_training:
+    module = importlib.import_module("solution." + parameters["simulator_config"]["simulator_file"])
+    importlib.reload(module)
+    Network = getattr(module, parameters["simulator_config"]["model"])
+    global_train = getattr(module, "global_train")
+    network = Network(**hparams)
+    network.train(benchmark.train_dataset,
+                local=True)
+else:
+    network = torch.load("model.pth").to(device)
 
 # %%
 import time
