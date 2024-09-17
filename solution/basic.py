@@ -1,4 +1,5 @@
 import time
+import os
 
 from tqdm import tqdm
 import numpy as np
@@ -16,6 +17,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 
 import matplotlib.pyplot as plt
+
 
 class DelaunayTransform(BaseTransform):
     def __init__(self, dim=2):
@@ -94,7 +96,8 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = GraphSAGE(self.device, 7, [64, 128, 128, 64], 4)
+        self.model = GraphSAGE(self.device, 7, [128, 256, 256, 128], 4)
+        #self.scaler = StandardScalerIterative()
         self.hparams = kwargs
         if use_cuda:
             print('Using GPU')
@@ -112,6 +115,16 @@ class BasicSimulator(nn.Module):
 
         nodes_features, node_labels = dataset.extract_data()
 
+        nodes_features,node_labels=dataset.extract_data()
+        if training:
+            print("Normalize train data")
+            #nodes_features, node_labels = self.scaler.fit_transform(nodes_features, node_labels)
+            print("Transform done")
+        else:
+            print("Normalize not train data")
+            #nodes_features, node_labels = self.scaler.transform(nodes_features, node_labels)
+            print("Transform done")
+
         transform = DelaunayTransform() 
 
         torchDataset=[]
@@ -121,7 +134,6 @@ class BasicSimulator(nn.Module):
         i = 0
         for nb_nodes_in_simulation in nb_nodes_in_simulations:
             i += 1
-            start = time.time()
             end_index = start_index+nb_nodes_in_simulation
             simulation_positions = torch.tensor(position[start_index:end_index,:], dtype = torch.float) 
             simulation_features = torch.tensor(nodes_features[start_index:end_index,:], dtype = torch.float) 
@@ -142,7 +154,18 @@ class BasicSimulator(nn.Module):
 
     def train(self, train_dataset, save_path=None, local=False):
         print("Training")
-        train_dataset = self.process_dataset(dataset=train_dataset, training=True)
+        if local:
+            # Check if file exists
+            if os.path.exists("train_dataset_meshed.pth"):
+                # Load the dataset
+                train_dataset = torch.load("train_dataset_meshed.pth")
+            else:
+                # Process the dataset
+                train_dataset = self.process_dataset(dataset=train_dataset, training=True)
+                # Save the dataset
+                torch.save(train_dataset, "train_dataset_meshed.pth")
+        else:
+            train_dataset = self.process_dataset(dataset=train_dataset, training=True)
         model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted', local=local)
         # Save the model
         torch.save(model, "model.pth")
@@ -190,6 +213,14 @@ class BasicSimulator(nn.Module):
         predictions= np.vstack(predictions)
         predictions = dataset.reconstruct_output(predictions)
         return predictions
+    
+    def _post_process(self, data):
+        #try:
+        #    processed = self.scaler.inverse_transform(data)
+        #except TypeError:
+        #    processed = self.scaler.inverse_transform(data.cpu())
+        #return processed
+        return data
 
 
 
@@ -237,10 +268,7 @@ def global_train(device, train_dataset: DataLoader, network: GraphSAGE, hparams:
 
     # Plotting the loss
     plt.plot(train_loss_list, label='Total Loss')
-    plt.plot(train_loss_surf_list, label='Surface Loss')
-    plt.plot(train_loss_vol_list, label='Volume Loss')
-    plt.legend()
-    plt.show()
+    plt.savefig('total_loss.png')
     
     return model
     
@@ -255,8 +283,6 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
     avg_loss_surf = 0
     avg_loss_vol = 0
     iterNum = 0
-    print("Train loader: ", train_loader)
-    losses = []
     start = time.time()
     for data in train_loader:
         data_clone = data.clone()
@@ -276,13 +302,10 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         loss_surf = loss_surf_var.mean()
         loss_vol = loss_vol_var.mean()
 
-        start = time.time()
         if criterion == 'MSE_weighted':            
             (loss_vol + reg*loss_surf).backward()      
-            losses.append((loss_vol + reg*loss_surf).cpu().data.numpy())     
         else:
             total_loss.backward()
-            losses.append(total_loss.cpu().data.numpy())
         
         optimizer.step()
         scheduler.step()
@@ -295,13 +318,6 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         iterNum += 1
     print("Time for epoch: ", time.time()-start)
     print("Loss: ", avg_loss.cpu().data.numpy()/iterNum)
-
-    fig = plt.figure()
-    plt.plot(losses)
-    plt.savefig("losses.png")
-    plt.show()
-
-    
 
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
             avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum

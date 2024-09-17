@@ -7,3 +7,4 @@ target/
 *.png
 *.svg
 *.jpeg
+*.pth

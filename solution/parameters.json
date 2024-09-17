@@ -3,7 +3,7 @@
     "scoringonly": false,
     "simulator_config": {
       "simulator_type": "custom",
-      "simulator_file": "models.basic",
+      "simulator_file": "basic",
       "name": "MyBasicSimulator",
       "model": "BasicSimulator",
       "scaler_type": "None"
@@ -12,7 +12,7 @@
       "nb_hidden_layers": 3,
       "size_hidden_layers": 64,
       "batch_size": 1,
-      "nb_epochs": 60,
+      "nb_epochs": 180,
       "lr": 0.001,
       "bn_bool": true
     },
