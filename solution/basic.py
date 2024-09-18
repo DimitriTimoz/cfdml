@@ -100,7 +100,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = GraphSAGE(self.device, 7, [128, 256, 256, 128], 4)
+        self.model = GraphSAGE(self.device, 5, [128, 256, 256, 128], 4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
@@ -119,6 +119,7 @@ class BasicSimulator(nn.Module):
         position = np.stack([coord_x,coord_y],axis=1)
 
         nodes_features, node_labels = dataset.extract_data()
+        nodes_features = nodes_features[:, 2:]
         fitted = False
         try:
             check_is_fitted(self.scaler)
