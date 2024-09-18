@@ -301,12 +301,12 @@ def global_train(device, train_dataset: DataLoader, network: PointNet, hparams: 
         total_steps=(len(train_dataset) // hparams['batch_size'] + 1) * hparams['nb_epochs'],
     )
 
-    train_loss_surf_list = []
-    train_loss_vol_list = []
-    loss_surf_var_list = []
-    loss_vol_var_list = []
+    best_loss = float('inf')
+    patience = hparams.get('patience', 5)  # Set default patience if not provided
+    patience_counter = 0
+
     train_loss_list = []
-    
+
     pbar_train = tqdm(range(hparams['nb_epochs']), position=0)
     epoch_nb = 0
 
@@ -314,25 +314,26 @@ def global_train(device, train_dataset: DataLoader, network: PointNet, hparams: 
         epoch_nb += 1
         print('Epoch: ', epoch_nb)
 
-        train_loss, _, loss_surf_var, loss_vol_var, loss_surf, loss_vol = train_model(device, model, train_dataset, optimizer, lr_scheduler, criterion, reg=reg)
-        if criterion == 'MSE_weighted':
-            train_loss = reg * loss_surf + loss_vol
+        train_loss, _, _, _, _, _ = train_model(device, model, train_dataset, optimizer, lr_scheduler, criterion, reg=reg)
+
         train_loss_list.append(train_loss)
-        train_loss_surf_list.append(loss_surf)
-        train_loss_vol_list.append(loss_vol)
-        loss_surf_var_list.append(loss_surf_var)
-        loss_vol_var_list.append(loss_vol_var)
 
-        f = open("losses.txt", "a")
-        f.write("Epoch: " + str(epoch) + " loss: " + str(train_loss) + " loss_surf: " + str(loss_surf) + " loss_vol: " + str(loss_vol) + "\n")
-        f.close()
-        
-    loss_surf_var_list = np.array(loss_surf_var_list)
-    loss_vol_var_list = np.array(loss_vol_var_list)
+        # Check for early stopping
+        if train_loss < best_loss:
+            best_loss = train_loss
+            patience_counter = 0  # Reset counter if there's improvement
+            # Save the model or any other actions
+            torch.save(model.state_dict(), "best_model.pth")
+        else:
+            patience_counter += 1  # Increment counter if no improvement
 
-    # Plotting the loss
-    plt.plot(train_loss_list, label='Total Loss')
-    plt.savefig('total_loss.png')
+        if patience_counter >= patience:
+            print(f"Early stopping activated. No improvement for {patience} epochs.")
+            break
+
+    # Load the best model
+    
+    model.load_state_dict(torch.load("best_model.pth"))
     
     return model
     
