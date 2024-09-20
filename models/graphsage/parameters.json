@@ -11,9 +11,8 @@
     "simulator_extra_parameters": {
       "batch_size": 1,
       "nb_epochs": 180,
-      "lr": 0.002,
+      "lr": 0.001,
       "bn_bool": true
     },
     "training_config": {}
   }
-  
