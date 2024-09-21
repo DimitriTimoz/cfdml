@@ -185,8 +185,7 @@ class BasicSimulator(nn.Module):
                             x=simulation_features, 
                             y=simulation_labels,
                             surf = simulation_surface.bool()) 
-            if i <= 103 or not training:
-                torchDataset.append(sampleData)
+            torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
         return DataLoader(dataset=torchDataset, batch_size=1)
 
