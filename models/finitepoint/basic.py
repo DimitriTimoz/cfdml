@@ -24,6 +24,9 @@ import numpy as np
 class SharedMLP(nn.Module):
     def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
         super().__init__()
+        if len(hidden_layers) <= 0:
+            hidden_layers = [out_channels]
+        
         self.model = nn.Sequential()
         self.model.add_module("conv1", Conv1d(in_channels=space_variable, out_channels=hidden_layers[0], kernel_size=1))
         self.model.add_module("relu1", ReLU())
@@ -34,11 +37,11 @@ class SharedMLP(nn.Module):
             self.model.add_module(f"relu{i+1}", ReLU())
             self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
             self.model.add_module(f"dropout{i+1}", Dropout(dropout))
-        
-        self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
-        self.model.add_module("relu_last", ReLU())
-        self.model.add_module("bn_last", nn.BatchNorm1d(out_channels))
-        
+            
+        if len(hidden_layers) > 0:
+            self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
+            self.model.add_module("relu_last", ReLU())
+            self.model.add_module("bn_last", nn.BatchNorm1d(out_channels))
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of the model
@@ -62,8 +65,6 @@ class FinitePoint(torch.nn.Module):
         self.mlp1 = SharedMLP(space_variable=pos_dim, hidden_layers=[64], out_channels=64)
         
         self.mlp2 = SharedMLP(space_variable=64+num_features, hidden_layers=[128], out_channels=1024)
-        self.avg_pool = AvgPool1d(kernel_size=1024)
-        
 
         self.mlp3 = SharedMLP(space_variable=1024+64, hidden_layers=[512, 256], out_channels=128)
         self.mlp4 = SharedMLP(space_variable=128, hidden_layers=[], out_channels=num_attributes)
@@ -79,23 +80,27 @@ class FinitePoint(torch.nn.Module):
         Returns:
             torch.Tensor: Tensor of shape [N, num_attributes]
         """
-        
-        print("Features: ", features.shape)
-        print("Pos: ", pos.shape)
+        N = features.shape[0]
+         
+        pos = pos.T # Shape [n_dim, N]
+        features = features.T # Shape [num_features, N]
         # Positional encoding
-        pos = self.mlp1(pos)
+        pos = self.mlp1(pos) # Shape [64, N]
         
         # Concatenate the positional encoding with the features
-        x = torch.cat([features, pos], dim=1)
+        x = torch.cat([features, pos.T], dim=0) # Shape [num_features+64, N]
         
         # Pass through the first MLP
-        x = self.mlp2(x)
-        x = self.avg_pool(x.unsqueeze(0)).squeeze(0)
+        x = self.mlp2(x) # Shape [N, 1024]
+        pooling = AvgPool1d(kernel_size=x.shape[0]) 
+        x = pooling(x.T).squeeze() # [1024]
+
+        x = x.repeat(N, 1) # [N, 1024]
         
         # Concatenate the positional encoding with the features
-        x = torch.cat([x, pos], dim=1)
+        x = torch.cat([x.T, pos.T], dim=0) 
         x = self.mlp3(x)
-        x = self.mlp4(x)
+        x = self.mlp4(x.T)
         
         return x
             
