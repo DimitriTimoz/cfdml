@@ -7,7 +7,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 from torch_geometric.nn import global_max_pool
@@ -15,7 +14,7 @@ from torch_geometric.nn import MessagePassing
 from torch.nn import Sequential, Linear, ReLU, Dropout
 
 import torch.nn.functional as F
-from torch.nn import Sequential, Linear, ReLU, Dropout, BatchNorm1d
+from torch.nn import Sequential, Linear, ReLU, Dropout, LayerNorm
 from torch_geometric.nn import MessagePassing, fps, radius, global_max_pool
 
 from sklearn.utils.validation import check_is_fitted
@@ -28,10 +27,10 @@ class PointNetLayer(MessagePassing):
         super().__init__(aggr='max')
         self.mlp = Sequential(
             Linear(in_channels + 2, out_channels),
-            BatchNorm1d(out_channels),
+            LayerNorm(out_channels),
             ReLU(),
             Linear(out_channels, out_channels),
-            BatchNorm1d(out_channels),
+            LayerNorm(out_channels),
             ReLU(),
         )
     
@@ -42,6 +41,7 @@ class PointNetLayer(MessagePassing):
         relative_pos = pos_j - pos_i
         edge_feat = torch.cat([h_j, relative_pos], dim=-1)
         return self.mlp(edge_feat)
+
 
 class SetAbstractionLayer(torch.nn.Module):
     def __init__(self, in_channels, out_channels, num_samples, radius):
@@ -71,26 +71,23 @@ class ImprovedPointNetPlusPlus(torch.nn.Module):
         self.device = device
         self.num_attributes = num_attributes
         
-        # Couche d'abstraction hiérarchiques
         self.sa1 = SetAbstractionLayer(in_channels, 128, num_samples=512, radius=0.1).to(device)
         self.sa2 = SetAbstractionLayer(128, 256, num_samples=128, radius=0.2).to(device)
         self.sa3 = SetAbstractionLayer(256, 512, num_samples=32, radius=0.4).to(device) 
         
-        # Global Feature Extraction
         self.conv_global = PointNetLayer(512, 1024).to(device)
         
-        # MLP pour la prédiction des attributs
         self.mlp = Sequential(
             Dropout(0.3),
             Linear(1024, 1024),
-            BatchNorm1d(1024),
+            LayerNorm(1024),
             ReLU(),
             Dropout(0.3),
             Linear(1024, 512),
-            BatchNorm1d(512),
+            LayerNorm(512),
             ReLU(),
             Dropout(0.3),
-            Linear(512, num_attributes)  # Nombre d'attributs en sortie
+            Linear(512, self.num_attributes)
         ).to(device)
     
     def forward(self, h: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
