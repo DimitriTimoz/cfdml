@@ -27,7 +27,7 @@ class PointNetLayer(MessagePassing):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__(aggr='max')
         self.mlp = Sequential(
-            Linear(in_channels + 3, out_channels),
+            Linear(in_channels + 2, out_channels),
             BatchNorm1d(out_channels),
             ReLU(),
             Linear(out_channels, out_channels),
@@ -59,10 +59,10 @@ class SetAbstractionLayer(torch.nn.Module):
         
         # Swap pos and pos_sampled
         edge_index = radius(pos_sampled, pos, self.radius, batch_sampled, batch)
-        edge_index = torch.flip(edge_index, [0])  # Swap indices
+        edge_index = torch.flip(edge_index, [0])  
         
         h_new = self.conv(h, pos, edge_index)
-        h_new = h_new[idx]  # Get the sampled features
+        h_new = h_new[idx] 
         return h_new, pos_sampled
 
 class ImprovedPointNetPlusPlus(torch.nn.Module):
