@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing
-from torch.nn import Sequential, Linear, ReLU, Dropout
+from torch.nn import Sequential, Conv1d, ReLU, AvgPool1d
 
 import torch.nn.functional as F
 from torch.nn import Sequential, Linear, ReLU, Dropout, LayerNorm
@@ -21,97 +21,83 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 
 
-class PointNetLayer(MessagePassing):
-    def __init__(self, in_channels: int, out_channels: int):
-        super().__init__(aggr='max')
-        self.mlp = Sequential(
-            Linear(in_channels + 2, out_channels),
-            LayerNorm(out_channels),
-            ReLU(),
-            Linear(out_channels, out_channels),
-            LayerNorm(out_channels),
-            ReLU(),
-        )
-    
-    def forward(self, h, pos, edge_index):
-        return self.propagate(edge_index, h=h, pos=pos)
-    
-    def message(self, h_j, pos_j, pos_i):
-        relative_pos = pos_j - pos_i
-        edge_feat = torch.cat([h_j, relative_pos], dim=-1)
-        return self.mlp(edge_feat)
-
-
-class SetAbstractionLayer(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, num_samples, radius):
+class SharedMLP(nn.Module):
+    def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
         super().__init__()
-        self.num_samples = num_samples
-        self.radius = radius
-        self.conv = PointNetLayer(in_channels, out_channels)
-    
-    def forward(self, h, pos):
-        batch = torch.zeros(pos.size(0), dtype=torch.long, device=pos.device)
-        idx = fps(pos, batch, ratio=self.num_samples / pos.size(0))
-        pos_sampled = pos[idx]
-        h_sampled = h[idx]
-        batch_sampled = batch[idx]
+        self.model = nn.Sequential()
+        self.model.add_module("conv1", Conv1d(in_channels=space_variable, out_channels=hidden_layers[0], kernel_size=1))
+        self.model.add_module("relu1", ReLU())
+        self.model.add_module("bn1", nn.BatchNorm1d(hidden_layers[0]))
         
-        # Swap pos and pos_sampled
-        edge_index = radius(pos_sampled, pos, self.radius, batch_sampled, batch)
-        edge_index = torch.flip(edge_index, [0])  
+        for i in range(1, len(hidden_layers)):
+            self.model.add_module(f"conv{i+1}", Conv1d(in_channels=hidden_layers[i-1], out_channels=hidden_layers[i], kernel_size=1))
+            self.model.add_module(f"relu{i+1}", ReLU())
+            self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
+            self.model.add_module(f"dropout{i+1}", Dropout(dropout))
         
-        h_new = self.conv(h, pos, edge_index)
-        h_new = h_new[idx] 
-        return h_new, pos_sampled
+        self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
+        self.model.add_module("relu_last", ReLU())
+        self.model.add_module("bn_last", nn.BatchNorm1d(out_channels))
+        
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the model
 
-class ImprovedPointNetPlusPlus(torch.nn.Module):
-    def __init__(self, device, in_channels: int, num_attributes: int):
+        Args:
+            x (torch.Tensor): Input tensor of shape [N, space_variable]
+
+        Returns:
+            torch.Tensor: Output tensor of shape [N, out_channels]
+        """
+        # x has shape [N, space_variable]
+        return self.model(x.unsqueeze(0)).squeeze(0).T
+        
+
+class FinitePoint(torch.nn.Module):
+    def __init__(self, device, pos_dim: int, num_features: int, num_attributes: int):
         super().__init__()
         self.device = device
         self.num_attributes = num_attributes
         
-        self.sa1 = SetAbstractionLayer(in_channels, 128, num_samples=512, radius=0.1).to(device)
-        self.sa2 = SetAbstractionLayer(128, 256, num_samples=128, radius=0.2).to(device)
-        self.sa3 = SetAbstractionLayer(256, 512, num_samples=32, radius=0.4).to(device) 
+        self.mlp1 = SharedMLP(space_variable=pos_dim, hidden_layers=[64], out_channels=64)
         
-        self.conv_global = PointNetLayer(512, 1024).to(device)
+        self.mlp2 = SharedMLP(space_variable=64+num_features, hidden_layers=[128], out_channels=1024)
+        self.avg_pool = AvgPool1d(kernel_size=1024)
         
-        self.mlp = Sequential(
-            Dropout(0.3),
-            Linear(1024, 512),
-            LayerNorm(512),
-            ReLU(),
-            Dropout(0.3),
-            Linear(512, 256),
-            LayerNorm(256),
-            ReLU(),
-            Dropout(0.3),
-            Linear(256, self.num_attributes)
-        ).to(device)
+
+        self.mlp3 = SharedMLP(space_variable=1024+64, hidden_layers=[512, 256], out_channels=128)
+        self.mlp4 = SharedMLP(space_variable=128, hidden_layers=[], out_channels=num_attributes)
+        
     
-    def forward(self, h: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
-        # Set Abstraction Layers
-        h, pos = self.sa1(h, pos)
-        h = F.relu(h)
-        h, pos = self.sa2(h, pos)
-        h = F.relu(h)
-        h, pos = self.sa3(h, pos)
-        h = F.relu(h)
+    def forward(self, features: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the model
+
+        Args:
+            features (torch.Tensor): Tensor of shape [N, num_features]
+            pos (torch.Tensor): Tensor of shape [N, pos_dim]
+
+        Returns:
+            torch.Tensor: Tensor of shape [N, num_attributes]
+        """
         
-        # Global Feature Extraction
-        edge_index = self.radius_graph(pos, pos, r=0.5)
-        h = self.conv_global(h, pos, edge_index)
-        h = F.relu(h)
+        print("Features: ", features.shape)
+        print("Pos: ", pos.shape)
+        # Positional encoding
+        pos = self.mlp1(pos)
         
-        # MLP for Prediction (Per Node)
-        h = self.mlp(h)
-        return h  # Output shape: [num_nodes, num_attributes]
-    
-    def radius_graph(self, pos, pos_sampled, r):
-        # Fonction utilitaire pour créer un graphe de rayon global
-        batch = torch.zeros(pos.size(0), dtype=torch.long, device=pos.device)
-        batch_sampled = batch[:pos_sampled.size(0)]
-        return radius(pos, pos_sampled, r, batch, batch_sampled)
+        # Concatenate the positional encoding with the features
+        x = torch.cat([features, pos], dim=1)
+        
+        # Pass through the first MLP
+        x = self.mlp2(x)
+        x = self.avg_pool(x.unsqueeze(0)).squeeze(0)
+        
+        # Concatenate the positional encoding with the features
+        x = torch.cat([x, pos], dim=1)
+        x = self.mlp3(x)
+        x = self.mlp4(x)
+        
+        return x
             
 class BasicSimulator(nn.Module):
     def __init__(self, **kwargs):
@@ -119,7 +105,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = ImprovedPointNetPlusPlus(self.device, 5, 4)
+        self.model = FinitePoint(self.device, pos_dim=2, num_features=5, num_attributes=4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
