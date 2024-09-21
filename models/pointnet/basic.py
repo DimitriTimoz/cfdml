@@ -130,7 +130,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = ImprovedPointNetPlusPlus(self.device, 2, 4)
+        self.model = ImprovedPointNetPlusPlus(self.device, 5, 4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
