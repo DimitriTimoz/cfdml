@@ -160,12 +160,10 @@ class FinitePoint(torch.nn.Module):
         features = features.T # Shape [num_features, N]
         
         pos_clone = pos.clone()
-        pos = self.tnet1(pos)
-        print("shepeppeppeeppe", pos.shape)
-        pos = pos_clone.T@pos
-        print("shepeppeppeeppe", pos.shape)
+        pos = self.tnet1(pos) # Shape [2, 2]
+        pos = pos_clone.T@pos # Shape [N, 2]
         # Positional encoding
-        pos = self.mlp1(pos) # Shape [64, N]
+        pos = self.mlp1(pos.T) # Shape [64, N]
         
         pos_clone = pos.clone()
         pos = self.tnet2(pos)
