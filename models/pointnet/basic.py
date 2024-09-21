@@ -39,6 +39,9 @@ class PointNetLayer(MessagePassing):
     
     def forward(self, h: torch.Tensor, pos: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         # Propager les informations
+        print("Edge index: ", edge_index)
+        print("h shape: ", h.shape)
+        print("pos shape: ", pos.shape)
         return self.propagate(edge_index, h=h, pos=pos)
     
     def message(self, h_j: torch.Tensor, pos_j: torch.Tensor, pos_i: torch.Tensor) -> torch.Tensor:
