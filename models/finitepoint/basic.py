@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing
-from torch.nn import Sequential, Conv1d, ReLU, AvgPool1d
+from torch.nn import Sequential, Conv1d, ReLU, MaxPool1d
 
 import torch.nn.functional as F
 from torch.nn import Sequential, Linear, ReLU, Dropout, LayerNorm
@@ -20,6 +20,79 @@ from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 
+class SharedMLP(nn.Module):
+    def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
+        # FIXME: Remove the necessity of using transpose
+        super().__init__()
+        if len(hidden_layers) <= 0:
+            hidden_layers = [out_channels]
+        
+        self.model = nn.Sequential()
+        self.model.add_module("conv1", Conv1d(in_channels=space_variable, out_channels=hidden_layers[0], kernel_size=1))
+        self.model.add_module("relu1", ReLU())
+        self.model.add_module("bn1", nn.BatchNorm1d(hidden_layers[0]))
+        
+        for i in range(1, len(hidden_layers)):
+            self.model.add_module(f"conv{i+1}", Conv1d(in_channels=hidden_layers[i-1], out_channels=hidden_layers[i], kernel_size=1))
+            self.model.add_module(f"relu{i+1}", ReLU())
+            self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
+            self.model.add_module(f"dropout{i+1}", Dropout(dropout))
+            
+        if len(hidden_layers) > 0:
+            self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
+            self.model.add_module("relu_last", ReLU())
+            self.model.add_module("bn_last", nn.BatchNorm1d(out_channels))
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the model
+
+        Args:
+            x (torch.Tensor): Input tensor of shape [N, space_variable]
+
+        Returns:
+            torch.Tensor: Output tensor of shape [N, out_channels]
+        """
+        # x has shape [N, space_variable]
+        return self.model(x.unsqueeze(0)).squeeze(0).T
+
+class TNet(nn.Module):
+    """Transformation Network for regressing the transformation matrix."""
+    def __init__(self, k=3):
+        super(TNet, self).__init__()
+        self.k = k
+
+        self.mlp = SharedMLP(space_variable=k, hidden_layers=[64, 128], out_channels=1024)
+        self.fc = nn.Sequential(
+            nn.Linear(1024, 512),
+            nn.LayerNorm(512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.LayerNorm(256),
+            nn.ReLU(),
+            nn.Linear(256, k*k)
+        )
+
+        # Initialize as an identity matrix
+        self.fc[-1].weight.data.zero_()
+        self.fc[-1].bias.data.copy_(torch.eye(k).view(-1))
+
+    def forward(self, x):
+        """Forward pass of the model
+
+        Args:
+            x (torch.Tensor)
+
+        Returns:
+            torch.Tensor: Shape (k, k)
+        """
+        x = self.mlp(x)  # (N, 1024)
+        print("max", torch.max(x, 0))
+        x = torch.max(x.T, 1)[0]  # Max pooling across points, shape (1024)
+        print("x", x.shape)
+        x = self.fc(x)  # Shape (k*k)
+        x = x.view(self.k, self.k)
+        return x
+    
 
 class SharedMLP(nn.Module):
     def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
@@ -63,9 +136,11 @@ class FinitePoint(torch.nn.Module):
         self.num_attributes = num_attributes
         
         self.mlp1 = SharedMLP(space_variable=pos_dim, hidden_layers=[64], out_channels=64)
-        
-        self.mlp2 = SharedMLP(space_variable=64+num_features, hidden_layers=[128], out_channels=1024)
+        self.tnet1 = TNet(k=pos_dim)
 
+        self.mlp2 = SharedMLP(space_variable=64+num_features, hidden_layers=[128], out_channels=1024)
+        self.tnet2 = TNet(k=64)
+        
         self.mlp3 = SharedMLP(space_variable=1024+64, hidden_layers=[512, 256], out_channels=128)
         self.mlp4 = SharedMLP(space_variable=128, hidden_layers=[], out_channels=num_attributes)
         
@@ -84,6 +159,11 @@ class FinitePoint(torch.nn.Module):
          
         pos = pos.T # Shape [n_dim, N]
         features = features.T # Shape [num_features, N]
+        
+        pos_clone = pos.clone()
+        pos = self.tnet1(pos)
+        pos = pos@pos_clone
+        print(pos.shape)
         # Positional encoding
         pos = self.mlp1(pos) # Shape [64, N]
         
@@ -92,7 +172,7 @@ class FinitePoint(torch.nn.Module):
         
         # Pass through the first MLP
         x = self.mlp2(x) # Shape [N, 1024]
-        pooling = AvgPool1d(kernel_size=x.shape[0]) 
+        pooling = MaxPool1d(kernel_size=x.shape[0]) 
         x = pooling(x.T).squeeze() # [1024]
 
         x = x.repeat(N, 1) # [N, 1024]
