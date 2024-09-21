@@ -26,8 +26,6 @@ import numpy as np
 class PointNetLayer(MessagePassing):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__(aggr='max')
-        
-        # MLP avec BatchNorm et ReLU
         self.mlp = Sequential(
             Linear(in_channels + 3, out_channels),
             BatchNorm1d(out_channels),
@@ -37,17 +35,12 @@ class PointNetLayer(MessagePassing):
             ReLU(),
         )
     
-    def forward(self, h: torch.Tensor, pos: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        # Propager les informations
-        print("Edge index: ", edge_index)
-        print("h shape: ", h.shape)
-        print("pos shape: ", pos.shape)
+    def forward(self, h, pos, edge_index):
         return self.propagate(edge_index, h=h, pos=pos)
     
-    def message(self, h_j: torch.Tensor, pos_j: torch.Tensor, pos_i: torch.Tensor) -> torch.Tensor:
-        # Combiner les caractéristiques des nœuds avec les informations de position relative
-        relative_pos = pos_j - pos_i  # Dimension 3
-        edge_feat = torch.cat([h_j, relative_pos], dim=-1)  # in_channels + 3
+    def message(self, h_j, pos_j, pos_i):
+        relative_pos = pos_j - pos_i
+        edge_feat = torch.cat([h_j, relative_pos], dim=-1)
         return self.mlp(edge_feat)
 
 class SetAbstractionLayer(torch.nn.Module):
@@ -58,17 +51,18 @@ class SetAbstractionLayer(torch.nn.Module):
         self.conv = PointNetLayer(in_channels, out_channels)
     
     def forward(self, h, pos):
-        # Échantillonnage par FPS
-        batch = torch.zeros(pos.size(0), dtype=torch.long, device=pos.device)  # Supposons un seul lot
+        batch = torch.zeros(pos.size(0), dtype=torch.long, device=pos.device)
         idx = fps(pos, batch, ratio=self.num_samples / pos.size(0))
         pos_sampled = pos[idx]
         h_sampled = h[idx]
+        batch_sampled = batch[idx]
         
-        # Regroupement par rayon
-        edge_index = radius(pos, pos_sampled, self.radius, batch, batch[idx])
+        # Swap pos and pos_sampled
+        edge_index = radius(pos_sampled, pos, self.radius, batch_sampled, batch)
+        edge_index = torch.flip(edge_index, [0])  # Swap indices
         
-        # Appliquer le PointNetLayer
-        h_new = self.conv(h_sampled, pos_sampled, edge_index)
+        h_new = self.conv(h, pos, edge_index)
+        h_new = h_new[idx]  # Get the sampled features
         return h_new, pos_sampled
 
 class ImprovedPointNetPlusPlus(torch.nn.Module):
