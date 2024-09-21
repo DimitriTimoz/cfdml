@@ -162,7 +162,7 @@ class FinitePoint(torch.nn.Module):
         pos_clone = pos.clone()
         pos = self.tnet1(pos)
         pos = pos@pos_clone
-
+        print("shepeppeppeeppe", pos.shape)
         # Positional encoding
         pos = self.mlp1(pos) # Shape [64, N]
         
