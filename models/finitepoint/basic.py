@@ -86,9 +86,8 @@ class TNet(nn.Module):
             torch.Tensor: Shape (k, k)
         """
         x = self.mlp(x)  # (N, 1024)
-        print("max", torch.max(x, 0))
         x = torch.max(x.T, 1)[0]  # Max pooling across points, shape (1024)
-        print("x", x.shape)
+
         x = self.fc(x)  # Shape (k*k)
         x = x.view(self.k, self.k)
         return x
