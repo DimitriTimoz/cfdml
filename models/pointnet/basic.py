@@ -14,146 +14,126 @@ from torch_geometric.nn import global_max_pool
 from torch_geometric.nn import MessagePassing
 from torch.nn import Sequential, Linear, ReLU, Dropout
 
-from torch_geometric.transforms import BaseTransform
-from scipy.spatial import Delaunay
+import torch.nn.functional as F
+from torch.nn import Sequential, Linear, ReLU, Dropout, BatchNorm1d
+from torch_geometric.nn import MessagePassing, fps, radius, global_max_pool
 
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 
-import matplotlib.pyplot as plt
-
-class DelaunayTransform(BaseTransform):
-    def __init__(self, dim=2):
-        """
-        Initialize the DelaunayTransform.
-
-        Args:
-            dim (int): Dimensionality of the points (default is 2 for 2D).
-        """
-        self.dim = dim
-
-    def __call__(self, data: Data) -> Data:
-        """
-        Apply Delaunay triangulation to the node coordinates to construct edge_index.
-
-        Args:
-            data (Data): PyTorch Geometric Data object with 'x' attribute.
-
-        Returns:
-            Data: Updated Data object with 'edge_index' constructed via Delaunay triangulation.
-        """            
-        # Convert node features to NumPy array
-        points = data.pos
-
-        # Perform Delaunay triangulation
-        tri = Delaunay(points)
-        # Extract edges from the simplices
-        edges = set()
-        for simplex in tri.simplices:
-            # Each simplex is a triangle represented by three vertex indices
-            edges.add(tuple(sorted([simplex[0], simplex[1]])))
-            edges.add(tuple(sorted([simplex[0], simplex[2]])))
-            edges.add(tuple(sorted([simplex[1], simplex[2]])))
-
-        # Convert set of edges to a list
-        edge_index = np.array(list(edges)).T  # Shape: (2, num_edges)
-
-        # Convert edge_index to torch tensor
-        edge_index = torch.tensor(edge_index, dtype=torch.long)
-
-        # Optionally, you can compute edge attributes here (e.g., Euclidean distances)
-        # For example:
-        # edge_attr = torch.norm(data.x[edge_index[0]] - data.x[edge_index[1]], dim=1, keepdim=True)
-        # data.edge_attr = edge_attr
-
-        # Update the Data object
-        data.edge_index = edge_index
-        data.edge_attr = np.zeros((edge_index.shape[1], 1))
-
-        return data
-
 
 class PointNetLayer(MessagePassing):
     def __init__(self, in_channels: int, out_channels: int):
-        super().__init__(aggr='mean')
-
-        # MLP initialization
-        # Now, the input to the MLP is the node feature dimension (in_channels)
-        # plus the positional information (3D positions).
+        super().__init__(aggr='max')
+        
+        # MLP avec BatchNorm et ReLU
         self.mlp = Sequential(
-            Linear(in_channels + 2, out_channels),
+            Linear(in_channels + 3, out_channels),
+            BatchNorm1d(out_channels),
             ReLU(),
             Linear(out_channels, out_channels),
+            BatchNorm1d(out_channels),
+            ReLU(),
         )
-
-    def forward(self,
-                h: Tensor,
-                pos: Tensor,
-                edge_index: Tensor) -> Tensor:
-        # Propagate both node features and positions
+    
+    def forward(self, h: torch.Tensor, pos: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+        # Propager les informations
         return self.propagate(edge_index, h=h, pos=pos)
-
-    def message(self,
-                h_j: Tensor,
-                pos_j: Tensor,
-                pos_i: Tensor) -> Tensor:
-        # Combine node features with relative positional information
-        edge_feat = torch.cat([h_j, pos_j - pos_i], dim=-1)
+    
+    def message(self, h_j: torch.Tensor, pos_j: torch.Tensor, pos_i: torch.Tensor) -> torch.Tensor:
+        # Combiner les caractéristiques des nœuds avec les informations de position relative
+        relative_pos = pos_j - pos_i  # Dimension 3
+        edge_feat = torch.cat([h_j, relative_pos], dim=-1)  # in_channels + 3
         return self.mlp(edge_feat)
 
-class PointNet(torch.nn.Module):
+class SetAbstractionLayer(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, num_samples, radius):
+        super().__init__()
+        self.num_samples = num_samples
+        self.radius = radius
+        self.conv = PointNetLayer(in_channels, out_channels)
+    
+    def forward(self, h, pos):
+        # Échantillonnage par FPS
+        batch = torch.zeros(pos.size(0), dtype=torch.long, device=pos.device)  # Supposons un seul lot
+        idx = fps(pos, batch, ratio=self.num_samples / pos.size(0))
+        pos_sampled = pos[idx]
+        h_sampled = h[idx]
+        
+        # Regroupement par rayon
+        edge_index = radius(pos, pos_sampled, self.radius, batch, batch[idx])
+        
+        # Appliquer le PointNetLayer
+        h_new = self.conv(h, pos, edge_index)
+        return h_new, pos_sampled
+
+class ImprovedPointNetPlusPlus(torch.nn.Module):
     def __init__(self, device, in_channels: int, num_attributes: int):
         super().__init__()
-
         self.device = device
         self.num_attributes = num_attributes
-
-        # PointNet layers (in_channels is now the dimension of node features)
-        self.conv1 = PointNetLayer(in_channels, 128).to(self.device)
-        self.conv2 = PointNetLayer(128, 256).to(self.device)
-        self.conv3 = PointNetLayer(256, 1024).to(self.device)
-        self.conv4 = PointNetLayer(1024, 1024).to(self.device)
-
-        # MLP for per-node attribute prediction
+        
+        # Couche d'abstraction hiérarchique
+        self.sa1 = SetAbstractionLayer(in_channels, 128, num_samples=512, radius=0.1).to(device)
+        self.sa2 = SetAbstractionLayer(128, 256, num_samples=128, radius=0.2).to(device)
+        self.sa3 = SetAbstractionLayer(256, 512, num_samples=32, radius=0.4).to(device)
+        
+        # Global Feature Extraction
+        self.conv_global = PointNetLayer(512, 1024).to(device)
+        
+        # MLP pour la prédiction des attributs
         self.mlp = Sequential(
-            Dropout(0.2),
+            Dropout(0.3),
             Linear(1024, 1024),
-            Dropout(0.2),
+            BatchNorm1d(1024),
             ReLU(),
+            Dropout(0.3),
             Linear(1024, 512),
-            Dropout(0.2),
+            BatchNorm1d(512),
             ReLU(),
-            Dropout(0.2),
-            Linear(512, num_attributes)  # Output number of attributes per node
-        ).to(self.device)
-
-    def forward(self,
-                h: Tensor,  # Node features
-                pos: Tensor,  # Node positions
-                edge_index: Tensor) -> Tensor:
-
-        # Message passing over two layers (now with node features)
-        h = self.conv1(h=h, pos=pos, edge_index=edge_index)
-        h = h.relu()
-        h = self.conv2(h=h, pos=pos, edge_index=edge_index)
-        h = h.relu()
-        h = self.conv3(h=h, pos=pos, edge_index=edge_index)
-        h = h.relu()
-        h = self.conv4(h=h, pos=pos, edge_index=edge_index)
-        h = h.relu()
-        # Predict attributes for each node
+            Dropout(0.3),
+            Linear(512, num_attributes)  # Nombre d'attributs en sortie
+        ).to(device)
+    
+    def forward(self, h: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
+        # Première couche d'abstraction
+        h, pos = self.sa1(h, pos)
+        h = F.relu(h)
+        
+        # Deuxième couche d'abstraction
+        h, pos = self.sa2(h, pos)
+        h = F.relu(h)
+        
+        # Troisième couche d'abstraction
+        h, pos = self.sa3(h, pos)
+        h = F.relu(h)
+        
+        # Extraction de caractéristiques globales
+        edge_index = self.radius_graph(pos, pos, r=0.5)  # Exemple de rayon pour la globalisation
+        h = self.conv_global(h, pos, edge_index)
+        h = F.relu(h)
+        
+        # Agrégation globale (max pooling)
+        h = global_max_pool(h, torch.zeros(h.size(0), dtype=torch.long, device=h.device))
+        
+        # Prédiction des attributs
         h = self.mlp(h)
-        return h  # Output shape: [num_nodes, num_attributes]
+        return h  # Forme de sortie : [num_nodes, num_attributes]
+    
+    def radius_graph(self, pos, pos_sampled, r):
+        # Fonction utilitaire pour créer un graphe de rayon global
+        batch = torch.zeros(pos.size(0), dtype=torch.long, device=pos.device)
+        batch_sampled = batch[:pos_sampled.size(0)]
+        return radius(pos, pos_sampled, r, batch, batch_sampled)
             
-
 class BasicSimulator(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = PointNet(self.device, 5, 4)
+        self.model = ImprovedPointNetPlusPlus(self.device, 2, 4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
@@ -168,7 +148,7 @@ class BasicSimulator(nn.Module):
         coord_x=dataset.data['x-position']
         coord_y=dataset.data['y-position']
         surf_bool=dataset.extra_data['surface']
-
+        print(dataset.data["x-inlet_velocity"])
         position = np.stack([coord_x,coord_y],axis=1)
 
         nodes_features, node_labels = dataset.extract_data()
@@ -187,10 +167,7 @@ class BasicSimulator(nn.Module):
         else:
             print("Scale not train data")
             nodes_features = self.scaler.transform(nodes_features)
-            node_labels = self.target_scaler.transform(node_labels)
-        print("Transform done")
-        
-        transform = DelaunayTransform() 
+            node_labels = self.target_scaler.transform(node_labels)        
 
         torchDataset=[]
         nb_nodes_in_simulations = dataset.get_simulations_sizes()
@@ -204,13 +181,11 @@ class BasicSimulator(nn.Module):
             simulation_features = torch.tensor(nodes_features[start_index:end_index,:], dtype = torch.float) 
             simulation_labels = torch.tensor(node_labels[start_index:end_index,:], dtype = torch.float) 
             simulation_surface = torch.tensor(surf_bool[start_index:end_index])
-
             sampleData = Data(pos=simulation_positions,
                             x=simulation_features, 
                             y=simulation_labels,
                             surf = simulation_surface.bool()) 
             if i <= 103 or not training:
-                sampleData = transform(sampleData)
                 torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
         return DataLoader(dataset=torchDataset, batch_size=1)
@@ -251,7 +226,7 @@ class BasicSimulator(nn.Module):
             for data in test_dataset:        
                 data_clone = data.clone()
                 data_clone = data_clone.to(self.device)
-                out = self.model(data_clone.x, data_clone.pos, data_clone.edge_index)
+                out = self.model(data_clone.x, data_clone.pos)
 
                 targets = data_clone.y
                 loss_criterion = nn.MSELoss(reduction = 'none')
@@ -292,7 +267,7 @@ def custom_collate_fn(batch):
     print("in Batch: ", batch)
     return Data.from_data_list(batch)
 
-def global_train(device, train_dataset: DataLoader, network: PointNet, hparams: dict, criterion='MSE', reg=1, local=False):
+def global_train(device, train_dataset: DataLoader, network, hparams: dict, criterion='MSE', reg=1, local=False):
     model = network.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=hparams['lr'])
     lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
@@ -353,7 +328,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         data_clone = data.clone()
         data_clone = data_clone.to(device)   
         optimizer.zero_grad()  
-        out = model(data_clone.x, data_clone.pos, data_clone.edge_index)
+        out = model(data_clone.x, data_clone.pos)
         targets = data_clone.y.to(device)
 
         if criterion == 'MSE' or criterion == 'MSE_weighted':

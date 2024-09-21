@@ -3,7 +3,7 @@ numpy==1.21.5
 scikit_learn
 tqdm
 matplotlib
-scipy<=1.6.0
+scipy<=1.6
 six
 pathlib
 numba
@@ -21,8 +21,5 @@ loguru==0.6.0
 PyYAML==6.0
 einops
 lips-benchmark[recommended]
-torch-scatter
-torch-sparse
-torch-cluster
 torch-spline-conv
-
+pyvista
