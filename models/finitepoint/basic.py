@@ -166,7 +166,7 @@ class FinitePoint(torch.nn.Module):
         pos = self.mlp1(pos.T) # Shape [N, 64]
         
         pos_clone = pos.clone()
-        print(pos.shape)
+
         pos = self.tnet2(pos.T) # Shape [64, 64]
         pos = pos_clone@pos  # Shape [N, 64]
 
