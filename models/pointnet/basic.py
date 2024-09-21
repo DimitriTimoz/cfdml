@@ -79,41 +79,34 @@ class ImprovedPointNetPlusPlus(torch.nn.Module):
         
         self.mlp = Sequential(
             Dropout(0.3),
-            Linear(1024, 1024),
-            LayerNorm(1024),
-            ReLU(),
-            Dropout(0.3),
             Linear(1024, 512),
             LayerNorm(512),
             ReLU(),
             Dropout(0.3),
-            Linear(512, self.num_attributes)
+            Linear(512, 256),
+            LayerNorm(256),
+            ReLU(),
+            Dropout(0.3),
+            Linear(256, self.num_attributes)
         ).to(device)
     
     def forward(self, h: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
-        # Première couche d'abstraction
+        # Set Abstraction Layers
         h, pos = self.sa1(h, pos)
         h = F.relu(h)
-        
-        # Deuxième couche d'abstraction
         h, pos = self.sa2(h, pos)
         h = F.relu(h)
-        
-        # Troisième couche d'abstraction
         h, pos = self.sa3(h, pos)
         h = F.relu(h)
         
-        # Extraction de caractéristiques globales
-        edge_index = self.radius_graph(pos, pos, r=0.5)  # Exemple de rayon pour la globalisation
+        # Global Feature Extraction
+        edge_index = self.radius_graph(pos, pos, r=0.5)
         h = self.conv_global(h, pos, edge_index)
         h = F.relu(h)
         
-        # Agrégation globale (max pooling)
-        h = global_max_pool(h, torch.zeros(h.size(0), dtype=torch.long, device=h.device))
-        
-        # Prédiction des attributs
+        # MLP for Prediction (Per Node)
         h = self.mlp(h)
-        return h  # Forme de sortie : [num_nodes, num_attributes]
+        return h  # Output shape: [num_nodes, num_attributes]
     
     def radius_graph(self, pos, pos_sampled, r):
         # Fonction utilitaire pour créer un graphe de rayon global
