@@ -65,7 +65,7 @@ class SetAbstractionLayer(torch.nn.Module):
         edge_index = radius(pos, pos_sampled, self.radius, batch, batch[idx])
         
         # Appliquer le PointNetLayer
-        h_new = self.conv(h, pos, edge_index)
+        h_new = self.conv(h_sampled, pos, edge_index)
         return h_new, pos_sampled
 
 class ImprovedPointNetPlusPlus(torch.nn.Module):
