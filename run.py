@@ -36,10 +36,5 @@ if __name__ == "__main__":
             raise ValueError(f"Model name {model_name} does not exist, provide a valid model name e.g. <bi_transformer>")
     
     for model_name in model_name_list:
-        try:
-            run(model_name)
-        except Exception as e:
-            print(e)
-            print(f"Error in {model_name}, continuing the evaluation with the next model...")
-            continue
+        run(model_name)
         

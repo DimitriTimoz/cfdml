@@ -77,7 +77,7 @@ class ImprovedPointNetPlusPlus(torch.nn.Module):
         # Couche d'abstraction hiérarchiques
         self.sa1 = SetAbstractionLayer(in_channels + 2, 128, num_samples=512, radius=0.1).to(device)
         self.sa2 = SetAbstractionLayer(128, 256, num_samples=128, radius=0.2).to(device)
-        self.sa3 = SetAbstractionLayer(256, 512, num_samples=32, radius=0.4).to(device)
+        self.sa3 = SetAbstractionLayer(256, 512, num_samples=32, radius=0.4).to(device) 
         
         # Global Feature Extraction
         self.conv_global = PointNetLayer(512, 1024).to(device)
