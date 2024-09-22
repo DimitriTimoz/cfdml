@@ -44,7 +44,7 @@ class TimeoutException(Exception):
 
 def save_example_simulation(simulator, benchmark):
     print("Saving a simulation example")
-    dataset_loader = simulator.process_dataset(benchmark.benchmark.train_dataset)
+    dataset_loader = simulator.process_dataset(benchmark.train_dataset)
     for data in dataset_loader:
         predictions = simulator.predict(data) # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
