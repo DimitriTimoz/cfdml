@@ -91,14 +91,14 @@ class FinitePoint(torch.nn.Module):
         self.device = device
         self.dim = dim + num_features
         
-        self.mlp1 = SharedMLP(space_variable=self.dim, hidden_layers=[64], out_channels=64)
         self.tnet1 = TNet(k=self.dim)
+        self.mlp1 = SharedMLP(space_variable=self.dim, hidden_layers=[128], out_channels=128)
 
-        self.mlp2 = SharedMLP(space_variable=64, hidden_layers=[128], out_channels=1024)
-        self.tnet2 = TNet(k=64)
+        self.tnet2 = TNet(k=128)
+        self.mlp2 = SharedMLP(space_variable=128, hidden_layers=[256], out_channels=2048)
         
-        self.mlp3 = SharedMLP(space_variable=1024+64, hidden_layers=[512, 256], out_channels=128)
-        self.mlp4 = SharedMLP(space_variable=128, hidden_layers=[], out_channels=num_attributes)
+        self.mlp3 = SharedMLP(space_variable=2048+128, hidden_layers=[1024, 1024, 512], out_channels=256)
+        self.mlp4 = SharedMLP(space_variable=256, hidden_layers=[], out_channels=num_attributes)
         
     
     def forward(self, features: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
