@@ -7,18 +7,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import Conv1d, ReLU, MaxPool1d, ReLU, Dropout
+
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
-from torch_geometric.nn import MessagePassing
-from torch.nn import Sequential, Conv1d, ReLU, MaxPool1d
-
-import torch.nn.functional as F
-from torch.nn import Sequential, Linear, ReLU, Dropout, LayerNorm
-from torch_geometric.nn import MessagePassing, fps, radius, global_max_pool
 
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-import numpy as np
 
 class SharedMLP(nn.Module):
     def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
@@ -52,7 +47,6 @@ class SharedMLP(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape [N, out_channels]
         """
-        # x has shape [N, space_variable]
         return self.model(x.unsqueeze(0)).squeeze(0).T
 
 class TNet(nn.Module):
@@ -80,7 +74,7 @@ class TNet(nn.Module):
         """Forward pass of the model
 
         Args:
-            x (torch.Tensor)
+            x (torch.Tensor) (N, k)
 
         Returns:
             torch.Tensor: Shape (k, k)
@@ -89,55 +83,18 @@ class TNet(nn.Module):
         x = torch.max(x.T, 1)[0]  # Max pooling across points, shape (1024)
 
         x = self.fc(x)  # Shape (k*k)
-        x = x.view(self.k, self.k)
+        x = x.view(self.k, self.k) # Shape (k, k)
         return x
-    
-
-class SharedMLP(nn.Module):
-    def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
-        super().__init__()
-        if len(hidden_layers) <= 0:
-            hidden_layers = [out_channels]
-        
-        self.model = nn.Sequential()
-        self.model.add_module("conv1", Conv1d(in_channels=space_variable, out_channels=hidden_layers[0], kernel_size=1))
-        self.model.add_module("relu1", ReLU())
-        self.model.add_module("bn1", nn.BatchNorm1d(hidden_layers[0]))
-        
-        for i in range(1, len(hidden_layers)):
-            self.model.add_module(f"conv{i+1}", Conv1d(in_channels=hidden_layers[i-1], out_channels=hidden_layers[i], kernel_size=1))
-            self.model.add_module(f"relu{i+1}", ReLU())
-            self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
-            self.model.add_module(f"dropout{i+1}", Dropout(dropout))
-            
-        if len(hidden_layers) > 0:
-            self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
-            self.model.add_module("relu_last", ReLU())
-            self.model.add_module("bn_last", nn.BatchNorm1d(out_channels))
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass of the model
-
-        Args:
-            x (torch.Tensor): Input tensor of shape [N, space_variable]
-
-        Returns:
-            torch.Tensor: Output tensor of shape [N, out_channels]
-        """
-        # x has shape [N, space_variable]
-        return self.model(x.unsqueeze(0)).squeeze(0).T
-        
-
 class FinitePoint(torch.nn.Module):
-    def __init__(self, device, pos_dim: int, num_features: int, num_attributes: int):
+    def __init__(self, device, dim: int, num_features: int, num_attributes: int):
         super().__init__()
         self.device = device
-        self.num_attributes = num_attributes
+        self.dim = dim + num_features
         
-        self.mlp1 = SharedMLP(space_variable=pos_dim, hidden_layers=[64], out_channels=64)
-        self.tnet1 = TNet(k=pos_dim)
+        self.mlp1 = SharedMLP(space_variable=self.dim, hidden_layers=[64], out_channels=64)
+        self.tnet1 = TNet(k=self.dim)
 
-        self.mlp2 = SharedMLP(space_variable=64+num_features, hidden_layers=[128], out_channels=1024)
+        self.mlp2 = SharedMLP(space_variable=64, hidden_layers=[128], out_channels=1024)
         self.tnet2 = TNet(k=64)
         
         self.mlp3 = SharedMLP(space_variable=1024+64, hidden_layers=[512, 256], out_channels=128)
@@ -158,7 +115,7 @@ class FinitePoint(torch.nn.Module):
          
         pos = pos.T # Shape [n_dim, N]
         features = features.T # Shape [num_features, N]
-        
+        pos = torch.cat([features, pos], dim=0) # Shape [num_features+n_dim, N]
         pos_clone = pos.clone()
         pos = self.tnet1(pos) # Shape [2, 2]
         pos = pos_clone.T@pos # Shape [N, 2]
@@ -171,7 +128,7 @@ class FinitePoint(torch.nn.Module):
         pos = pos_clone@pos  # Shape [N, 64]
 
         # Concatenate the positional encoding with the features
-        x = torch.cat([features, pos.T], dim=0) # Shape [num_features+64, N]
+        x = pos.T # Shape [64, N]
         
         # Pass through the first MLP
         x = self.mlp2(x) # Shape [N, 1024]
@@ -193,7 +150,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = FinitePoint(self.device, pos_dim=2, num_features=5, num_attributes=4)
+        self.model = FinitePoint(self.device, dim=2, num_features=5, num_attributes=4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
@@ -208,7 +165,6 @@ class BasicSimulator(nn.Module):
         coord_x=dataset.data['x-position']
         coord_y=dataset.data['y-position']
         surf_bool=dataset.extra_data['surface']
-        print(dataset.data["x-inlet_velocity"])
         position = np.stack([coord_x,coord_y],axis=1)
 
         nodes_features, node_labels = dataset.extract_data()
@@ -255,7 +211,6 @@ class BasicSimulator(nn.Module):
         if local:
             # Check if file exists
             if os.path.exists("train_dataset_meshed.pth"):
-                # Load the dataset
                 train_dataset = torch.load("train_dataset_meshed.pth")
             else:
                 # Process the dataset
@@ -321,11 +276,6 @@ class BasicSimulator(nn.Module):
         return processed
 
 
-
-def custom_collate_fn(batch):
-    print("in Batch: ", batch)
-    return Data.from_data_list(batch)
-
 def global_train(device, train_dataset: DataLoader, network, hparams: dict, criterion='MSE', reg=1, local=False):
     model = network.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=hparams['lr'])
@@ -366,7 +316,6 @@ def global_train(device, train_dataset: DataLoader, network, hparams: dict, crit
             break
 
     # Load the best model
-    
     model.load_state_dict(torch.load("best_model.pth"))
     
     return model
@@ -400,7 +349,6 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         loss_vol_var = loss_criterion(out[~data_clone.surf, :], targets[~data_clone.surf, :]).mean(dim = 0)
         loss_surf = loss_surf_var.mean()
         loss_vol = loss_vol_var.mean()
-
         if criterion == 'MSE_weighted':            
             (loss_vol + reg*loss_surf).backward()      
         else:
@@ -415,6 +363,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         avg_loss_surf += loss_surf
         avg_loss_vol += loss_vol 
         iterNum += 1
+    print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, RAM memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
     print("Time for epoch: ", time.time()-start)
     print("Loss: ", avg_loss.cpu().data.numpy()/iterNum)
 
