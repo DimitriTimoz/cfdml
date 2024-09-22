@@ -102,7 +102,7 @@ class BasicSimulator(nn.Module):
             sampleData = Data(pos=simulation_positions,
                             x=simulation_features, 
                             y=simulation_labels,
-                            edge_index=edges[name[0]],
+                            edge_index=Tensor(edges[name[0]]).to(self.device),
                             surf = simulation_surface.bool()) 
             torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
