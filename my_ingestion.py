@@ -49,7 +49,7 @@ def save_example_simulation(simulator, benchmark):
     dataset_loader = simulator.process_dataset(benchmark.train_dataset, False)
     for data in dataset_loader:
         datalaoder = DataLoader(dataset=[data], batch_size=1)
-        predictions = simulator.predict(datalaoder) # Shape, (N, 4)
+        predictions = simulator.predict(datalaoder, process=False)[0] # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
         print("Save in ", EXAMPLE_PATH)
         

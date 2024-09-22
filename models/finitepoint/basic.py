@@ -225,7 +225,10 @@ class BasicSimulator(nn.Module):
             torch.save(self, "model.pth")
 
     def predict(self, dataset, **kwargs):
-        test_dataset = self.process_dataset(dataset, training=False)
+        process = kwargs.get('process', True)
+        test_dataset = dataset
+        if process:
+            test_dataset = self.process_dataset(dataset, training=False)
         self.model.eval()
         avg_loss_per_var = np.zeros(4)
         avg_loss = 0
