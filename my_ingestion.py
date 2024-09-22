@@ -48,6 +48,8 @@ def save_example_simulation(simulator, benchmark):
     print("Saving a simulation example")
     dataset_loader = simulator.process_dataset(benchmark.train_dataset, False)
     for data in dataset_loader:
+        print("Data shape: ", data.x.shape)
+        print("Data pos shape: ", data.pos.shape)
         datalaoder = DataLoader(dataset=[data], batch_size=1)
         predictions = simulator.predict(datalaoder, process=False)[0] # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
