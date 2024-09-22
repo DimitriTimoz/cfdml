@@ -48,20 +48,15 @@ class TimeoutException(Exception):
 def save_example_simulation(simulator, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Saving a simulation example")
-    dataset_loader = simulator.process_dataset(benchmark.train_dataset, False)
-    for data in dataset_loader:
-        print("Data shape: ", data.x.shape)
-        print("Data pos shape: ", data.pos.shape)
-        datalaoder = DataLoader(dataset=[data], batch_size=1)
-        simulator.to(device)
-        predictions = simulator.predict(datalaoder, process=False)[0] # Shape, (N, 4)
-        EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
-        print("Save in ", EXAMPLE_PATH)
-        
-        df = pd.DataFrame(predictions, columns=["velocity-x", "velocity-y", "pressure", "turbulent-kinetic-energy"])
-        df.to_csv(EXAMPLE_PATH, index=False)
-        print("Example simulation saved")
-        break
+    simulator.to(device)
+    predictions = simulator.predict(benchmark._test_dataset, False)
+    print("Prediction type: ", type(predictions))
+    print("Prediction: ", predictions)
+    print("Predictions shape: ", predictions.shape)
+
+    predictions.save("./test")
+    print("Example simulation saved")
+
     
 def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
     #### Check whether everything went well (no time exceeded)
