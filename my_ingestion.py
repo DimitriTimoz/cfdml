@@ -49,12 +49,16 @@ def save_example_simulation(simulator, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Saving a simulation example")
     simulator.to(device)
-    predictions = simulator.predict(benchmark._test_dataset)
+    dataset = benchmark._test_dataset
+    predictions = simulator.predict(dataset)
     print("Prediction type: ", type(predictions))
     print("Prediction: ", predictions)
-    print("Predictions shape: ", predictions.shape)
+    nb_nodes_in_simulations = dataset.get_simulations_sizes()
+    for key in predictions.keys():
+        predictions[key] = predictions[key][:nb_nodes_in_simulations[0]]
+    
+    pd.DataFrame(predictions).to_csv("./test.csv")
 
-    predictions.save("./test")
     print("Example simulation saved")
 
     
