@@ -6,6 +6,7 @@ import sys
 import datetime
 import json
 import importlib
+import pandas as pd
 the_date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M")
 
 # =========================== BEGIN PROGRAM ================================
@@ -41,6 +42,16 @@ class TimeoutException(Exception):
     """timeoutexception"""
 
 
+def save_example_simulation(simulator, benchmark):
+    print("Saving a simulation example")
+    predictions = simulator.predict(benchmark.test_dataset[0][0]) # Shape, (N, 4)
+    EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
+    print("Save in ", EXAMPLE_PATH)
+    
+    df = pd.DataFrame(predictions, columns=["velocity-x", "velocity-y", "pressure", "turbulent-kinetic-energy"])
+    df.to_csv(EXAMPLE_PATH, index=False)
+    print("Example simulation saved")
+    
 def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
     #### Check whether everything went well (no time exceeded)
     execution_success = True
@@ -269,6 +280,7 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
                                 **run_parameters["simulator_extra_parameters"]
                                 )
 
+    save_example_simulation(simulator, benchmark)
     LOAD_PATH = os.path.join(submission_dir, "checkpoint")
     if run_parameters["evaluateonly"]:
         print("Evaluation only mode activated")
@@ -332,4 +344,5 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
 
     print("finished evaluation!\nEvaluation metrics:")
     print(json_metrics)
+    save_example_simulation(simulator, benchmark)
     return 0
