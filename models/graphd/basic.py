@@ -146,7 +146,7 @@ class BasicSimulator(nn.Module):
             for data in test_dataset:        
                 data_clone = data.clone()
                 data_clone = data_clone.to(self.device)
-                out = self.model(data_clone.x, data_clone.pos)
+                out = self.model(data_clone)
 
                 targets = data_clone.y
                 loss_criterion = nn.MSELoss(reduction = 'none')
@@ -242,7 +242,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         data_clone = data.clone()
         data_clone = data_clone.to(device)   
         optimizer.zero_grad()  
-        out = model(data_clone.x, data_clone.pos)
+        out = model(data_clone)
         targets = data_clone.y.to(device)
 
         if criterion == 'MSE' or criterion == 'MSE_weighted':
