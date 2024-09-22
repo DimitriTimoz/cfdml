@@ -178,7 +178,8 @@ class BasicSimulator(nn.Module):
             train_dataset = self.process_dataset(dataset=train_dataset, training=True)
         model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted', local=local)
         # Save the model
-        torch.save(self, "model.pth")
+        if local:
+            torch.save(self, "model.pth")
 
     def predict(self, dataset, **kwargs):
         test_dataset = self.process_dataset(dataset, training=False)
