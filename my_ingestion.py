@@ -49,7 +49,7 @@ def save_example_simulation(simulator, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Saving a simulation example")
     simulator.to(device)
-    predictions = simulator.predict(benchmark._test_dataset, False)
+    predictions = simulator.predict(benchmark._test_dataset)
     print("Prediction type: ", type(predictions))
     print("Prediction: ", predictions)
     print("Predictions shape: ", predictions.shape)
