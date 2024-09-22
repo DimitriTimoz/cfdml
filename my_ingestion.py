@@ -7,6 +7,8 @@ import datetime
 import json
 import importlib
 import pandas as pd
+from torch_geometric.loader import DataLoader
+
 the_date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M")
 
 # =========================== BEGIN PROGRAM ================================
@@ -46,7 +48,8 @@ def save_example_simulation(simulator, benchmark):
     print("Saving a simulation example")
     dataset_loader = simulator.process_dataset(benchmark.train_dataset, False)
     for data in dataset_loader:
-        predictions = simulator(data) # Shape, (N, 4)
+        datalaoder = DataLoader(dataset=[data], batch_size=1)
+        predictions = simulator.predict(data) # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
         print("Save in ", EXAMPLE_PATH)
         
