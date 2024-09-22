@@ -8,6 +8,7 @@ import json
 import importlib
 import pandas as pd
 from torch_geometric.loader import DataLoader
+import torch
 
 the_date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M")
 
@@ -45,12 +46,15 @@ class TimeoutException(Exception):
 
 
 def save_example_simulation(simulator, benchmark):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Saving a simulation example")
     dataset_loader = simulator.process_dataset(benchmark.train_dataset, False)
     for data in dataset_loader:
         print("Data shape: ", data.x.shape)
         print("Data pos shape: ", data.pos.shape)
         datalaoder = DataLoader(dataset=[data], batch_size=1)
+        simulator.to(device)
+        datalaoder.to(device)
         predictions = simulator.predict(datalaoder, process=False)[0] # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
         print("Save in ", EXAMPLE_PATH)
