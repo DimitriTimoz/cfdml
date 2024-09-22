@@ -298,7 +298,6 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
     else:
         print("Training simulator")
         start = time.time()
-        save_example_simulation(simulator, benchmark)
         simulator.train(benchmark.train_dataset, 
                     save_path=LOAD_PATH, 
                     **run_parameters["training_config"]
