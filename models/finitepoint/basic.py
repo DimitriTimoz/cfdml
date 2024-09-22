@@ -363,7 +363,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         avg_loss_surf += loss_surf
         avg_loss_vol += loss_vol 
         iterNum += 1
-    print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, RAM memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
+    print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, Max memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
     print("Time for epoch: ", time.time()-start)
     print("Loss: ", avg_loss.cpu().data.numpy()/iterNum)
 
