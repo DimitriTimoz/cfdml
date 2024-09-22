@@ -10,7 +10,7 @@
      },
     "simulator_extra_parameters": {
       "batch_size": 1,
-      "nb_epochs": 100,
+      "nb_epochs": 180,
       "lr": 0.0015,
       "bn_bool": true,
       "patience": 5
