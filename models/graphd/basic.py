@@ -88,11 +88,15 @@ class BasicSimulator(nn.Module):
         torchDataset=[]
         nb_nodes_in_simulations = dataset.get_simulations_sizes()
         simulation_names = dataset.extra_data["simulation_names"]
-        print("Number of simulations: ", simulation_names)
+        print(simulation_names[:][0])
+        print(simulation_names[:][1])
+        print(simulation_names[0][:])
+        print(simulation_names[1][:])
+        print("Number of simulations: ", simulation_names[:][1])
         start_index = 0
         print("Start processing dataset")
         i = 0
-        for name, nb_nodes_in_simulation in zip(simulation_names[:][0], nb_nodes_in_simulations):
+        for name, nb_nodes_in_simulation in zip(simulation_names[:][1], nb_nodes_in_simulations):
             end_index = start_index+nb_nodes_in_simulation
             simulation_positions = torch.tensor(position[start_index:end_index,:], dtype = torch.float) 
             simulation_features = torch.tensor(nodes_features[start_index:end_index,:], dtype = torch.float) 
