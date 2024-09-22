@@ -2,6 +2,7 @@ import os
 import concurrent.futures
 import numpy as np
 import pyvista as pv
+import torch
 
 def load_edges(dataset, path):
     raws = dataset.extra_data["simulation_names"]
@@ -35,5 +36,7 @@ def _extract_edges(path):
     lines = edges.lines
 
     # Optimize edge extraction by directly accessing point indices
-    edges_array = np.column_stack((lines[1::3], lines[2::3]))
-    return edges_array
+    edges_array = np.column_stack((lines[1::3], lines[2::3])).reshape(2, -1)
+    edges_tensor = torch.tensor(edges_array, dtype=torch.int64)
+    return edges_tensor
+
