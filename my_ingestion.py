@@ -46,7 +46,7 @@ def save_example_simulation(simulator, benchmark):
     print("Saving a simulation example")
     dataset_loader = simulator.process_dataset(benchmark.train_dataset, False)
     for data in dataset_loader:
-        predictions = simulator.predict(data) # Shape, (N, 4)
+        predictions = simulator(data) # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
         print("Save in ", EXAMPLE_PATH)
         
@@ -283,7 +283,6 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
                                 **run_parameters["simulator_extra_parameters"]
                                 )
 
-    save_example_simulation(simulator, benchmark)
     LOAD_PATH = os.path.join(submission_dir, "checkpoint")
     if run_parameters["evaluateonly"]:
         print("Evaluation only mode activated")
@@ -292,6 +291,7 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
     else:
         print("Training simulator")
         start = time.time()
+        save_example_simulation(simulator, benchmark)
         simulator.train(benchmark.train_dataset, 
                     save_path=LOAD_PATH, 
                     **run_parameters["training_config"]
