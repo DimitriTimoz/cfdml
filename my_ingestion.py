@@ -54,7 +54,6 @@ def save_example_simulation(simulator, benchmark):
         print("Data pos shape: ", data.pos.shape)
         datalaoder = DataLoader(dataset=[data], batch_size=1)
         simulator.to(device)
-        datalaoder.to(device)
         predictions = simulator.predict(datalaoder, process=False)[0] # Shape, (N, 4)
         EXAMPLE_PATH = os.path.join("./", "example_simulation.csv")
         print("Save in ", EXAMPLE_PATH)
