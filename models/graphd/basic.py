@@ -83,26 +83,26 @@ class BasicSimulator(nn.Module):
             node_labels = self.target_scaler.transform(node_labels)        
 
         print("Extracting edges")
-        edges = load_edges(dataset, self.benchmark_path, training)
+        edges = load_edges(dataset, self.benchmark_path)
         print("Edges extracted")
         torchDataset=[]
         nb_nodes_in_simulations = dataset.get_simulations_sizes()
+        simulation_names = dataset.extra_data["simulation_names"]
+        print("Number of simulations: ", simulation_names)
         start_index = 0
         print("Start processing dataset")
         i = 0
-        for nb_nodes_in_simulation in nb_nodes_in_simulations:
+        for name, nb_nodes_in_simulation in zip(simulation_names[0], nb_nodes_in_simulations):
             end_index = start_index+nb_nodes_in_simulation
             simulation_positions = torch.tensor(position[start_index:end_index,:], dtype = torch.float) 
             simulation_features = torch.tensor(nodes_features[start_index:end_index,:], dtype = torch.float) 
             simulation_labels = torch.tensor(node_labels[start_index:end_index,:], dtype = torch.float) 
             simulation_surface = torch.tensor(surf_bool[start_index:end_index])
             print("Simulation ", i, " with ", nb_nodes_in_simulation, " nodes")
-            print("Nodes in the file", edges[i][1])
-            assert edges[i][1] == nb_nodes_in_simulation
             sampleData = Data(pos=simulation_positions,
                             x=simulation_features, 
                             y=simulation_labels,
-                            edges=edges[i][0],
+                            edges=edges[name],
                             surf = simulation_surface.bool()) 
             torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
