@@ -48,7 +48,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = GraphD(self.device, 5, [16, 32, 128, 128, 32], 4)
+        self.model = GraphD(self.device, 5, [32, 128, 128, 32], 4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
