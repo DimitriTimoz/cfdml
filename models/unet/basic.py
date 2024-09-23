@@ -19,12 +19,10 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from parser import load_edges
 
 class GraphD(torch.nn.Module):
-    def __init__(self, device, in_dim, hidden_dims: list, out_dim, dropout=0.2):
+    def __init__(self, device, in_dim, out_dim):
         super().__init__()
         self.device = device
-        self.dropout = dropout
-        hidden_dims.append(out_dim)
-        self.unet = GraphUNet(in_dim, 128, out_dim, depth=3, pool_ratios=0.5)    
+        self.unet = GraphUNet(in_dim, 512, out_dim, depth=4, pool_ratios=0.35)    
           
     def forward(self, data) -> Tensor: 
         x = data.x.to(self.device)
@@ -38,7 +36,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = GraphD(self.device, 5, [32, 128, 128, 32], 4)
+        self.model = GraphD(self.device, 5, 4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs
