@@ -54,8 +54,16 @@ def save_example_simulation(simulator, benchmark):
     print("Prediction type: ", type(predictions))
     print("Prediction: ", predictions)
     nb_nodes_in_simulations = dataset.get_simulations_sizes()
+    
+    # Get first positions 
+    coord_x=dataset.data['x-position'][:nb_nodes_in_simulations[0]]
+    coord_y=dataset.data['y-position'][:nb_nodes_in_simulations[0]]
+
     for key in predictions.keys():
         predictions[key] = predictions[key][:nb_nodes_in_simulations[0]]
+    
+    predictions['x-position'] = coord_x
+    predictions['y-position'] = coord_y
     
     pd.DataFrame(predictions).to_csv("./test.csv")
 

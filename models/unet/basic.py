@@ -24,7 +24,8 @@ class GraphD(torch.nn.Module):
         self.device = device
         self.dropout = dropout
         hidden_dims.append(out_dim)
-        self.unet = GraphUNet(in_dim, 128, out_dim, depth=3, pool_ratios=0.5)        
+        self.unet = GraphUNet(in_dim, 128, out_dim, depth=3, pool_ratios=0.5)    
+          
     def forward(self, data) -> Tensor: 
         x = data.x.to(self.device)
         edge_index = data.edge_index.to(self.device)

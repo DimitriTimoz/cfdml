@@ -223,6 +223,7 @@ def global_train(device, train_dataset: DataLoader, network, hparams: dict, crit
         if patience_counter >= patience:
             print(f"Early stopping activated. No improvement for {patience} epochs.")
             break
+        torch.cuda.empty_cache()
 
     # Load the best model
     model.load_state_dict(torch.load("best_model.pth"))
