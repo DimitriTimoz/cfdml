@@ -23,11 +23,12 @@ class GraphD(torch.nn.Module):
         super().__init__()
         self.device = device
         self.dropout = dropout
+        self.heads = 4
         hidden_dims.append(out_dim)
         self.transformers = nn.ModuleList()
         for hidden_dim in hidden_dims:
-            self.transformers.append(TransformerConv(in_dim, hidden_dim, heads=2, dropout=0.1).to(self.device))
-            in_dim = hidden_dim
+            self.transformers.append(TransformerConv(in_dim, hidden_dim, heads=self.heads, dropout=0.1).to(self.device))
+            in_dim = hidden_dim * self.heads
     
     def forward(self, data) -> Tensor: 
         x = data.x.to(self.device)
@@ -44,7 +45,7 @@ class BasicSimulator(nn.Module):
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
-        self.model = GraphD(self.device, 5, [128, 512, 512, 256], 4)
+        self.model = GraphD(self.device, 5, [128, 512, 256], 4)
         self.scaler = StandardScaler(copy=False)
         self.target_scaler = MinMaxScaler(copy=False)
         self.hparams = kwargs

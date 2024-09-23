@@ -19,13 +19,13 @@ def load_edges(dataset, path):
         future_to_name = {
             executor.submit(_extract_edges, sim_path): name for sim_path, name in simulation_list
         }
-        progress = tqdm.tqdm("Mesh loading", concurrent.futures.as_completed(future_to_name), total=len(simulation_list))
         
-        for future in progress:
+        for future in concurrent.futures.as_completed(future_to_name):
             name = future_to_name[future]
             try:
                 result = future.result()
                 edges[name] = result
+                print(f"Simulation {name} has been processed")
             except Exception as exc:
                 print(f"Simulation {name} generated an exception: {exc}")
 
