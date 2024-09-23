@@ -23,7 +23,7 @@ class GraphD(torch.nn.Module):
         super().__init__()
         self.device = device
         self.dropout = dropout
-        self.heads = 4
+        self.heads = 3
         hidden_dims.append(out_dim)
         self.transformers = nn.ModuleList()
         for hidden_dim in hidden_dims:
