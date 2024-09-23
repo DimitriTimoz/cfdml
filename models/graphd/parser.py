@@ -26,7 +26,6 @@ def load_edges(dataset, path):
             try:
                 result = future.result()
                 edges[name] = result
-                print(f"Simulation {name} has been processed")
             except Exception as exc:
                 print(f"Simulation {name} generated an exception: {exc}")
 
