@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch import Tensor
 import torch.nn.functional as F
 from torch.nn import Conv1d, ReLU, MaxPool1d, ReLU, Dropout
-from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import SAGEConv, TransformerConv
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 
@@ -24,19 +24,18 @@ class GraphD(torch.nn.Module):
         self.device = device
         self.dropout = dropout
         hidden_dims.append(out_dim)
-        self.convs = nn.ModuleList()
+        self.transformers = nn.ModuleList()
         for hidden_dim in hidden_dims:
-            self.convs.append(SAGEConv(in_dim, hidden_dim).to(self.device))
+            self.transformers.append(TransformerConv(in_dim, hidden_dim, heads=2, dropout=0.1).to(self.device))
             in_dim = hidden_dim
     
     def forward(self, data) -> Tensor: 
         x = data.x.to(self.device)
         edge_index = data.edge_index.to(self.device)
-        for conv in self.convs[:-1]:
-            x = F.relu(conv(x, edge_index))
-            x = F.dropout(x, p=self.dropout)
+        for transformer in self.transformers[:-1]:
+            x = F.relu(transformer(x, edge_index))
             
-        x = self.convs[-1](x, edge_index)
+        x = self.transformers[-1](x, edge_index)
         return x # TODO: choose activation function according to the variable
             
 class BasicSimulator(nn.Module):
