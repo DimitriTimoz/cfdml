@@ -29,7 +29,8 @@ class GraphD(torch.nn.Module):
         for hidden_dim in hidden_dims:
             self.transformers.append(TransformerConv(in_dim, hidden_dim, heads=self.heads, dropout=0.1).to(self.device))
             in_dim = hidden_dim * self.heads
-    
+        self.sage = SAGEConv(in_dim, out_dim, normalize=True).to(self.device)
+        
     def forward(self, data) -> Tensor: 
         x = data.x.to(self.device)
         edge_index = data.edge_index.to(self.device)
@@ -37,6 +38,8 @@ class GraphD(torch.nn.Module):
             x = F.relu(transformer(x, edge_index))
             
         x = self.transformers[-1](x, edge_index)
+        x = self.sage(x, edge_index)
+        x = F.elu(x)
         return x # TODO: choose activation function according to the variable
             
 class BasicSimulator(nn.Module):
