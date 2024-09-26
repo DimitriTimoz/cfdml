@@ -158,6 +158,7 @@ class BasicSimulator(nn.Module):
                 iterNum += 1
 
                 prediction = out.cpu().data.numpy()
+                prediction = self._post_process(prediction) 
                 predictions.append(prediction)
         print("Results for test")
         print(avg_loss/iterNum, avg_loss_per_var/iterNum, avg_loss_surf_var/iterNum, avg_loss_vol_var/iterNum, avg_loss_surf/iterNum, avg_loss_vol/iterNum)
