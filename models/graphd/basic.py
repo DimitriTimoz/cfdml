@@ -16,7 +16,7 @@ from torch_geometric.data import Data
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-from parser import load_edges
+from utils import Delaunay
 
 class GraphD(torch.nn.Module):
     def __init__(self, device, in_dim, hidden_dims: list, out_dim, dropout=0.2):
@@ -50,7 +50,7 @@ class BasicSimulator(nn.Module):
         self.device = 'cuda:0' if use_cuda else 'cpu'
         self.model = GraphD(self.device, 5, [32, 128, 128, 32], 4)
         self.scaler = StandardScaler(copy=False)
-        self.target_scaler = MinMaxScaler(copy=False)
+        self.target_scaler = StandardScaler(copy=False)
         self.hparams = kwargs
         self.benchmark_path = benchmark.benchmark_path
 
@@ -85,28 +85,27 @@ class BasicSimulator(nn.Module):
             nodes_features = self.scaler.transform(nodes_features)
             node_labels = self.target_scaler.transform(node_labels)        
 
-        print("Extracting edges")
-        edges = load_edges(dataset, self.benchmark_path)
-        print("Edges extracted")
-        torchDataset=[]
+        transform = Delaunay() 
+
+        torchDataset = []
         nb_nodes_in_simulations = dataset.get_simulations_sizes()
         simulation_names = dataset.extra_data["simulation_names"]
         print("Number of simulations: ", simulation_names[:][1])
         start_index = 0
         print("Start processing dataset")
         i = 0
-        for name, nb_nodes_in_simulation in zip(simulation_names, nb_nodes_in_simulations):
+        for nb_nodes_in_simulation in nb_nodes_in_simulations:
             end_index = start_index+nb_nodes_in_simulation
             simulation_positions = torch.tensor(position[start_index:end_index,:], dtype = torch.float) 
             simulation_features = torch.tensor(nodes_features[start_index:end_index,:], dtype = torch.float) 
             simulation_labels = torch.tensor(node_labels[start_index:end_index,:], dtype = torch.float) 
             simulation_surface = torch.tensor(surf_bool[start_index:end_index])
-            print("Simulation ", i, " with ", nb_nodes_in_simulation, " nodes")
+            
             sampleData = Data(pos=simulation_positions,
                             x=simulation_features, 
                             y=simulation_labels,
-                            edge_index=Tensor(edges[name[0]]),
                             surf = simulation_surface.bool()) 
+            sampleData = transform(sampleData)
             torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
             i += 1
@@ -126,7 +125,7 @@ class BasicSimulator(nn.Module):
                 torch.save(train_dataset, "train_dataset_meshed.pth")
         else:
             train_dataset = self.process_dataset(dataset=train_dataset, training=True)
-        model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted', local=local)
+        model = global_train(self.device, train_dataset, self.model, self.hparams, criterion = 'MSE_weighted', local=local)
         # Save the model
         if local:
             torch.save(self, "model.pth")

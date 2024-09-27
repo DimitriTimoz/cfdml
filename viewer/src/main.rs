@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let max_y = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
     // Création de la zone de dessin
-    let root = SVGBackend::new("graph.svg", (1920*2, 1080*2)).into_drawing_area();
+    let root = BitMapBackend::new("graph.png", (1920*2, 1080*2)).into_drawing_area();
     root.fill(&WHITE)?;
     let mut chart = ChartBuilder::on(&root)
         .margin(10)
