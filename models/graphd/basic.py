@@ -16,7 +16,7 @@ from torch_geometric.data import Data
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-from utils import Delaunay
+from utils import DelaunayTransform
 
 class GraphD(torch.nn.Module):
     def __init__(self, device, in_dim, hidden_dims: list, out_dim, dropout=0.2):
@@ -85,7 +85,7 @@ class BasicSimulator(nn.Module):
             nodes_features = self.scaler.transform(nodes_features)
             node_labels = self.target_scaler.transform(node_labels)        
 
-        transform = Delaunay() 
+        transform = DelaunayTransform() 
 
         torchDataset = []
         nb_nodes_in_simulations = dataset.get_simulations_sizes()

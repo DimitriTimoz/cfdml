@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from scipy.spatial import Delaunay
 
-class Delaunay(BaseTransform):
+class DelaunayTransform(BaseTransform):
     def __init__(self, dim=2):
         """
         Initialize the DelaunayTransform.
