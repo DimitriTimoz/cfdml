@@ -26,6 +26,7 @@ class DelaunayTransform(BaseTransform):
         Returns:
             Data: Updated Data object with 'edge_index' constructed via Delaunay triangulation.
         """            
+        
         # Convert node features to NumPy array
         points = data.pos
 
@@ -34,10 +35,16 @@ class DelaunayTransform(BaseTransform):
         # Extract edges from the simplices
         edges = set()
         for simplex in tri.simplices:
-            # Each simplex is a triangle represented by three vertex indices
-            edges.add(tuple(sorted([simplex[0], simplex[1]])))
-            edges.add(tuple(sorted([simplex[0], simplex[2]])))
-            edges.add(tuple(sorted([simplex[1], simplex[2]])))
+            # Each simplex is a triangle represented by three vertex indices    
+            allOnSurf = True
+            for i in range(3):
+                if not data.surf[simplex[i]]:
+                    allOnSurf = False
+                    break
+            if not allOnSurf:
+                edges.add(tuple(sorted([simplex[0], simplex[1]])))
+                edges.add(tuple(sorted([simplex[0], simplex[2]])))
+                edges.add(tuple(sorted([simplex[1], simplex[2]])))
 
         # Convert set of edges to a list
         edge_index = np.array(list(edges)).T  # Shape: (2, num_edges)
