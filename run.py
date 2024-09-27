@@ -26,7 +26,7 @@ def run(model_name):
 
 if __name__ == "__main__":
     # read input in command line
-    model_name_list = ["graphd"]#sys.argv[1:]
+    model_name_list = sys.argv[1:]
     if len(model_name_list)==0:
         raise ValueError("Provide at least one model name to run the evaluation on e.g. <bi_transformer>")
     
