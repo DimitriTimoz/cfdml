@@ -459,11 +459,10 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         loss_surf = loss_surf_var.mean()
         loss_vol = loss_vol_var.mean()
         if criterion == 'MSE_weighted':            
-            (loss_vol + reg*loss_surf).backward()      
+            scaler.scale((loss_vol + reg*loss_surf)).backward()
         else:
-            total_loss.backward()
+            scaler.scale(total_loss).backward()
         
-        scaler.scale(total_loss).backward()
         scaler.step(optimizer)
         scaler.update()
         scheduler.step()
