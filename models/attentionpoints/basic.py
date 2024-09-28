@@ -215,17 +215,8 @@ class AttentionPoint(torch.nn.Module):
         self.transf2 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
         self.transf3 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
 
-        self.decoder = torch.nn.Sequential( #TODO/ Test with PointNetDecoder
-            Linear(32, 64),
-            nn.ELU(),
-            Linear(64, 64),
-            nn.ELU(),
-            Linear(64, 32),
-            nn.ELU(),
-            Linear(32, 16),
-            nn.ELU(),
-            Linear(16, num_attributes)
-        )
+        self.decoder = PointNetEncoder(device, dim=32, output_channels=num_attributes)
+        
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """Forward pass of the model
