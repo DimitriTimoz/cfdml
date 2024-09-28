@@ -77,8 +77,6 @@ class BasicSimulator(nn.Module):
 
         torchDataset = []
         nb_nodes_in_simulations = dataset.get_simulations_sizes()
-        simulation_names = dataset.extra_data["simulation_names"]
-        print("Number of simulations: ", simulation_names[:][1])
         start_index = 0
         print("Start processing dataset")
         i = 0

@@ -166,8 +166,8 @@ class BasicSimulator(nn.Module):
                 avg_loss_vol += loss_vol.cpu().numpy()  
                 iterNum += 1
 
+                prediction = out.cpu().data.numpy()
                 prediction = self._post_process(out)
-                prediction = prediction.cpu().data.numpy()
                 predictions.append(prediction)
         print("Results for test")
         print(avg_loss/iterNum, avg_loss_per_var/iterNum, avg_loss_surf_var/iterNum, avg_loss_vol_var/iterNum, avg_loss_surf/iterNum, avg_loss_vol/iterNum)
