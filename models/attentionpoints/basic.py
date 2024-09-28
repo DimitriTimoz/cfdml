@@ -167,7 +167,7 @@ class PointNetEncoder(nn.Module):
         self.mlp1 = SharedMLP(space_variable=self.dim, hidden_layers=[64], out_channels=64)
 
         self.tnet2 = TNet(k=64)
-        self.mlp2 = SharedMLP(space_variable=64, hidden_layers=[128], out_channels=self.output_channels)
+        self.mlp2 = SharedMLP(space_variable=64, hidden_layers=[128, 128], out_channels=self.output_channels)
                 
     
     def forward(self, features: torch.Tensor) -> torch.Tensor:
