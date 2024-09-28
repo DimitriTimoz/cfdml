@@ -245,13 +245,15 @@ class AttentionPoint(torch.nn.Module):
         return out
             
 class BasicSimulator(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, benchmark, **kwargs):
         super().__init__()
         self.name = "AirfRANSSubmission"
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
         self.model = AttentionPoint(self.device, input_dim=7, num_attributes=4)
-        self.scaler = StandardScalerIterative(copy=False)
+        chunk_sizes=benchmark.train_dataset.get_simulations_sizes()
+        scalerParams={"chunk_sizes":chunk_sizes}
+        self.scaler = StandardScalerIterative(**scalerParams)
         self.hparams = kwargs
         if use_cuda:
             print('Using GPU')
