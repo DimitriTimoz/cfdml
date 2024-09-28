@@ -82,7 +82,7 @@ class TransformerBlock(torch.nn.Module):
         z1 = self.layer_norm(x)
         w = self.layer_norm(y)
         # Passez x en argument
-        z = checkpoint.checkpoint(self.custom_forward, x, z1, w)
+        z = checkpoint.checkpoint(self.custom_forward, x, z1, w) if self.training else self.custom_forward(x, z1, w)
         return z
 
 class SharedMLP(nn.Module):
