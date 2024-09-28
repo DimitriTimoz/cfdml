@@ -206,7 +206,7 @@ class AttentionPoint(torch.nn.Module):
         self.device = device
         self.input_dim = input_dim 
         
-        self.sample_size = 2000
+        self.sample_size = 1000
         
         self.encoder = PointNetEncoder(device, dim=input_dim, output_channels=32)
         self.transf1 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
