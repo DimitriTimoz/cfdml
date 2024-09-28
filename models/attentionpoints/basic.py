@@ -17,7 +17,7 @@ import torch.utils.checkpoint as checkpoint
 from torch.cuda.amp import autocast, GradScaler
 
 from sklearn.utils.validation import check_is_fitted
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from lips.dataset.scaler.standard_scaler_iterative import StandardScalerIterative
 
 
 def smoothSoftmax(x):
@@ -208,7 +208,7 @@ class AttentionPoint(torch.nn.Module):
         self.device = device
         self.input_dim = input_dim 
         
-        self.sample_size = 2000
+        self.sample_size = 3000
         
         self.encoder = PointNetEncoder(device, dim=input_dim, output_channels=32)
         self.transf1 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
@@ -251,8 +251,7 @@ class BasicSimulator(nn.Module):
         use_cuda = torch.cuda.is_available()
         self.device = 'cuda:0' if use_cuda else 'cpu'
         self.model = AttentionPoint(self.device, input_dim=7, num_attributes=4)
-        self.scaler = StandardScaler(copy=False)
-        self.target_scaler = MinMaxScaler(copy=False)
+        self.scaler = StandardScalerIterative(copy=False)
         self.hparams = kwargs
         if use_cuda:
             print('Using GPU')
@@ -268,29 +267,20 @@ class BasicSimulator(nn.Module):
         position = np.stack([coord_x,coord_y],axis=1)
 
         nodes_features, node_labels = dataset.extract_data()
-        fitted = False
-        try:
-            check_is_fitted(self.scaler)
-            check_is_fitted(self.target_scaler)
-            fitted = True
-        except:
-            pass
-        if training or not fitted:
-            print("Scale train data")
-            nodes_features = self.scaler.fit_transform(nodes_features)
-            node_labels = self.target_scaler.fit_transform(node_labels)
+        if training:
+            print("Normalize train data")
+            nodes_features, node_labels = self.scaler.fit_transform(nodes_features, node_labels)
+            print("Transform done")
         else:
-            print("Scale not train data")
-            nodes_features = self.scaler.transform(nodes_features)
-            node_labels = self.target_scaler.transform(node_labels)        
+            print("Normalize not train data")
+            nodes_features, node_labels = self.scaler.transform(nodes_features, node_labels)
+            print("Transform done")
 
         torchDataset=[]
         nb_nodes_in_simulations = dataset.get_simulations_sizes()
         start_index = 0
         print("Start processing dataset")
-        i = 0
         for nb_nodes_in_simulation in nb_nodes_in_simulations:
-            i += 1
             end_index = start_index+nb_nodes_in_simulation
             simulation_positions = torch.tensor(position[start_index:end_index,:], dtype = torch.float) 
             simulation_features = torch.tensor(nodes_features[start_index:end_index,:], dtype = torch.float) 
@@ -307,17 +297,7 @@ class BasicSimulator(nn.Module):
     def train(self, train_dataset, save_path=None, local=False):
         print("Training")
 
-        if local:
-            # Check if file exists
-            if os.path.exists("train_dataset_meshed.pth"):
-                train_dataset = torch.load("train_dataset_meshed.pth")
-            else:
-                # Process the dataset
-                train_dataset = self.process_dataset(dataset=train_dataset, training=True)
-                # Save the dataset
-                torch.save(train_dataset, "train_dataset_meshed.pth")
-        else:
-            train_dataset = self.process_dataset(dataset=train_dataset, training=True)
+        train_dataset = self.process_dataset(dataset=train_dataset, training=True)
         model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted', local=local)
         # Save the model
         if local:
@@ -342,7 +322,7 @@ class BasicSimulator(nn.Module):
                 data = data.to(self.device)
                 out = self.model(data.x)
 
-                targets = data.y
+                targets = data.y.to(self.device)
                 loss_criterion = nn.MSELoss(reduction = 'none')
 
                 loss_per_var = loss_criterion(out, targets).mean(dim = 0)
@@ -370,9 +350,9 @@ class BasicSimulator(nn.Module):
     
     def _post_process(self, data):
         try:
-            processed = self.target_scaler.inverse_transform(data)
+            processed = self.scaler.inverse_transform(data)
         except TypeError:
-            processed = self.target_scaler.inverse_transform(data.cpu())
+            processed = self.scaler.inverse_transform(data.cpu())
         return processed
 
 
@@ -438,9 +418,9 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion='MS
         data = data.to(device)
         optimizer.zero_grad()
         with autocast():
+            targets = data.y.clone().to(device)
             out = model(data.x)
-            targets = data.y.to(device)
-            loss_criterion = nn.MSELoss(reduction='none') if criterion in ['MSE', 'MSE_weighted'] else nn.L1Loss(reduction='none')
+            loss_criterion = nn.MSELoss(reduction='none')
             loss_per_var = loss_criterion(out, targets).mean(dim=0)
             total_loss = loss_per_var.mean()
             loss_surf_var = loss_criterion(out[data.surf, :], targets[data.surf, :]).mean(dim=0)
