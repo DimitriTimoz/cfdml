@@ -70,17 +70,19 @@ class TransformerBlock(torch.nn.Module):
         self.mlp = MLP(layers)
         self.layer_norm = LayerNorm(sOUT)
 
-    def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        def custom_forward(z1, w):
+    def custom_forward(self, x, z1, w):
+        with autocast():
             z1 = self.att(z1, w)
             z1 = z1 + x
             z2 = self.layer_norm(z1)
             z2 = self.mlp(z2)
             return z2 + z1
 
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
         z1 = self.layer_norm(x)
         w = self.layer_norm(y)
-        z = checkpoint.checkpoint(custom_forward, z1, w)
+        # Passez x en argument
+        z = checkpoint.checkpoint(self.custom_forward, x, z1, w)
         return z
 
 class SharedMLP(nn.Module):
@@ -206,7 +208,7 @@ class AttentionPoint(torch.nn.Module):
         self.device = device
         self.input_dim = input_dim 
         
-        self.sample_size = 1000
+        self.sample_size = 2000
         
         self.encoder = PointNetEncoder(device, dim=input_dim, output_channels=32)
         self.transf1 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
@@ -429,54 +431,50 @@ def global_train(device, train_dataset: DataLoader, network, hparams: dict, crit
     return model
     
 
-def train_model(device, model, train_loader, optimizer, scheduler, criterion = 'MSE', reg = 1):
+def train_model(device, model, train_loader, optimizer, scheduler, criterion='MSE', reg=1):
     scaler = GradScaler()
-
     model.to(device)
     model.train()
-    avg_loss_per_var = torch.zeros(4, device = device)
+    avg_loss_per_var = torch.zeros(4, device=device)
     avg_loss = 0
-    avg_loss_surf_var = torch.zeros(4, device = device)
-    avg_loss_vol_var = torch.zeros(4, device = device)
+    avg_loss_surf_var = torch.zeros(4, device=device)
+    avg_loss_vol_var = torch.zeros(4, device=device)
     avg_loss_surf = 0
     avg_loss_vol = 0
     iterNum = 0
     start = time.time()
     for data in train_loader:
-        data = data.to(device)   
-        optimizer.zero_grad()  
-        out = model(data.x)
-        targets = data.y.to(device)
+        data = data.to(device)
+        optimizer.zero_grad()
+        with autocast():
+            out = model(data.x)
+            targets = data.y.to(device)
+            loss_criterion = nn.MSELoss(reduction='none') if criterion in ['MSE', 'MSE_weighted'] else nn.L1Loss(reduction='none')
+            loss_per_var = loss_criterion(out, targets).mean(dim=0)
+            total_loss = loss_per_var.mean()
+            loss_surf_var = loss_criterion(out[data.surf, :], targets[data.surf, :]).mean(dim=0)
+            loss_vol_var = loss_criterion(out[~data.surf, :], targets[~data.surf, :]).mean(dim=0)
+            loss_surf = loss_surf_var.mean()
+            loss_vol = loss_vol_var.mean()
+            loss = (loss_vol + reg*loss_surf) if criterion == 'MSE_weighted' else total_loss
 
-        if criterion == 'MSE' or criterion == 'MSE_weighted':
-            loss_criterion = nn.MSELoss(reduction = 'none')
-        elif criterion == 'MAE':
-            loss_criterion = nn.L1Loss(reduction = 'none')
-        loss_per_var = loss_criterion(out, targets).mean(dim = 0)
-        total_loss = loss_per_var.mean()
-        loss_surf_var = loss_criterion(out[data.surf, :], targets[data.surf, :]).mean(dim = 0)
-        loss_vol_var = loss_criterion(out[~data.surf, :], targets[~data.surf, :]).mean(dim = 0)
-        loss_surf = loss_surf_var.mean()
-        loss_vol = loss_vol_var.mean()
-        if criterion == 'MSE_weighted':            
-            scaler.scale((loss_vol + reg*loss_surf)).backward()
-        else:
-            scaler.scale(total_loss).backward()
-        
+        scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
         scheduler.step()
-        avg_loss_per_var += loss_per_var
-        avg_loss += total_loss
-        avg_loss_surf_var += loss_surf_var
-        avg_loss_vol_var += loss_vol_var
-        avg_loss_surf += loss_surf
-        avg_loss_vol += loss_vol 
+
+        avg_loss_per_var += loss_per_var.detach()
+        avg_loss += total_loss.detach()
+        avg_loss_surf_var += loss_surf_var.detach()
+        avg_loss_vol_var += loss_vol_var.detach()
+        avg_loss_surf += loss_surf.detach()
+        avg_loss_vol += loss_vol.detach()
         iterNum += 1
+
     print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, Max memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
     print("Time for epoch: ", time.time()-start)
     print("Loss: ", avg_loss.cpu().data.numpy()/iterNum)
     torch.cuda.empty_cache()
 
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
-            avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum
+           avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum
