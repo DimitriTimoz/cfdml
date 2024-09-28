@@ -13,6 +13,8 @@ from torch.nn import Conv1d, ReLU, MaxPool1d, ReLU, Dropout, LayerNorm, Linear
 
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
+import torch.utils.checkpoint as checkpoint
+from torch.cuda.amp import autocast, GradScaler
 
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -69,17 +71,17 @@ class TransformerBlock(torch.nn.Module):
         self.layer_norm = LayerNorm(sOUT)
 
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
+        def custom_forward(z1, w):
+            z1 = self.att(z1, w)
+            z1 = z1 + x
+            z2 = self.layer_norm(z1)
+            z2 = self.mlp(z2)
+            return z2 + z1
+
         z1 = self.layer_norm(x)
         w = self.layer_norm(y)
-        z1 = self.att(z1, w)
-        z1 = z1 + x
-
-        z2 = self.layer_norm(z1)
-        z2 = self.mlp(z2)
-        z2 = z2 + z1
-
-        return z2
-
+        z = checkpoint.checkpoint(custom_forward, z1, w)
+        return z
 
 class SharedMLP(nn.Module):
     def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
@@ -204,7 +206,7 @@ class AttentionPoint(torch.nn.Module):
         self.device = device
         self.input_dim = input_dim 
         
-        self.sample_size = 1500
+        self.sample_size = 2000
         
         self.encoder = PointNetEncoder(device, dim=input_dim, output_channels=32)
         self.transf1 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
@@ -344,17 +346,16 @@ class BasicSimulator(nn.Module):
         predictions=[]
         with torch.no_grad():
             for data in test_dataset:        
-                data_clone = data.clone()
-                data_clone = data_clone.to(self.device)
-                out = self.model(data_clone.x)
+                data = data.to(self.device)
+                out = self.model(data.x)
 
-                targets = data_clone.y
+                targets = data.y
                 loss_criterion = nn.MSELoss(reduction = 'none')
 
                 loss_per_var = loss_criterion(out, targets).mean(dim = 0)
                 loss = loss_per_var.mean()
-                loss_surf_var = loss_criterion(out[data_clone.surf, :], targets[data_clone.surf, :]).mean(dim = 0)
-                loss_vol_var = loss_criterion(out[~data_clone.surf, :], targets[~data_clone.surf, :]).mean(dim = 0)
+                loss_surf_var = loss_criterion(out[data.surf, :], targets[data.surf, :]).mean(dim = 0)
+                loss_vol_var = loss_criterion(out[~data.surf, :], targets[~data.surf, :]).mean(dim = 0)
                 loss_surf = loss_surf_var.mean()
                 loss_vol = loss_vol_var.mean()  
 
@@ -429,6 +430,8 @@ def global_train(device, train_dataset: DataLoader, network, hparams: dict, crit
     
 
 def train_model(device, model, train_loader, optimizer, scheduler, criterion = 'MSE', reg = 1):
+    scaler = GradScaler()
+
     model.to(device)
     model.train()
     avg_loss_per_var = torch.zeros(4, device = device)
@@ -460,7 +463,9 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         else:
             total_loss.backward()
         
-        optimizer.step()
+        scaler.scale(total_loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         scheduler.step()
         avg_loss_per_var += loss_per_var
         avg_loss += total_loss
