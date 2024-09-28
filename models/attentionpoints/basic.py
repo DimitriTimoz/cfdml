@@ -422,8 +422,9 @@ def global_train(device, train_dataset: DataLoader, network, hparams: dict, crit
             break
 
     # Load the best model
+    print("Loading the best model")
     model.load_state_dict(torch.load("best_model.pth"))
-    
+    print("Best model loaded")
     return model
     
 
