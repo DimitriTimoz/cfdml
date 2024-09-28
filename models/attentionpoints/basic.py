@@ -213,13 +213,13 @@ class AttentionPoint(torch.nn.Module):
 
         self.decoder = torch.nn.Sequential( #TODO/ Test with PointNetDecoder
             Linear(32, 64),
-            nn.ReLU(),
+            nn.ELU(),
             Linear(64, 64),
-            nn.ReLU(),
+            nn.ELU(),
             Linear(64, 32),
-            nn.ReLU(),
+            nn.ELU(),
             Linear(32, 16),
-            nn.ReLU(),
+            nn.ELU(),
             Linear(16, num_attributes)
         )
 
@@ -307,7 +307,7 @@ class BasicSimulator(nn.Module):
                             surf = simulation_surface.bool()) 
             torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
-        return DataLoader(dataset=torchDataset, batch_size=1)
+        return DataLoader(dataset=torchDataset, batch_size=1, pin_memory=True)
 
     def train(self, train_dataset, save_path=None, local=False):
         print("Training")
@@ -440,11 +440,10 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
     iterNum = 0
     start = time.time()
     for data in train_loader:
-        data_clone = data.clone()
-        data_clone = data_clone.to(device)   
+        data = data.to(device)   
         optimizer.zero_grad()  
-        out = model(data_clone.x)
-        targets = data_clone.y.to(device)
+        out = model(data.x)
+        targets = data.y.to(device)
 
         if criterion == 'MSE' or criterion == 'MSE_weighted':
             loss_criterion = nn.MSELoss(reduction = 'none')
@@ -452,8 +451,8 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
             loss_criterion = nn.L1Loss(reduction = 'none')
         loss_per_var = loss_criterion(out, targets).mean(dim = 0)
         total_loss = loss_per_var.mean()
-        loss_surf_var = loss_criterion(out[data_clone.surf, :], targets[data_clone.surf, :]).mean(dim = 0)
-        loss_vol_var = loss_criterion(out[~data_clone.surf, :], targets[~data_clone.surf, :]).mean(dim = 0)
+        loss_surf_var = loss_criterion(out[data.surf, :], targets[data.surf, :]).mean(dim = 0)
+        loss_vol_var = loss_criterion(out[~data.surf, :], targets[~data.surf, :]).mean(dim = 0)
         loss_surf = loss_surf_var.mean()
         loss_vol = loss_vol_var.mean()
         if criterion == 'MSE_weighted':            
@@ -473,6 +472,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
     print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, Max memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
     print("Time for epoch: ", time.time()-start)
     print("Loss: ", avg_loss.cpu().data.numpy()/iterNum)
+    torch.cuda.empty_cache()
 
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
             avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum
