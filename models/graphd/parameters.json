@@ -13,8 +13,7 @@
       "nb_epochs": 180,
       "lr": 0.00125,
       "bn_bool": true,
-      "patience": 4,
-      "graph_generator": "knn"
+      "patience": 4
     },
     "training_config": {}
   }
