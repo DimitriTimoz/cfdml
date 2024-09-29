@@ -400,6 +400,7 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
         del(train_dataset_sampled)
 
         train_loss, _, loss_surf_var, loss_vol_var, loss_surf, loss_vol = train_model(device, model, train_loader, optimizer, lr_scheduler, criterion, reg = reg)        
+        print('Train loss: ', train_loss)
         if criterion == 'MSE_weighted':
             train_loss = reg*loss_surf + loss_vol
         del(train_loader)
