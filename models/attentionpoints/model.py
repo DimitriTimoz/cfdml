@@ -327,7 +327,7 @@ class AugmentedSimulator():
             for data in test_dataset:        
                 data_clone = data.clone()
                 data_clone = data_clone.to(self.device)
-                out = self.model(data_clone)
+                out = self.model(data_clone.x)
 
                 targets = data_clone.y
                 loss_criterion = nn.MSELoss(reduction = 'none')
@@ -428,7 +428,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         data_clone = data.clone()
         data_clone = data_clone.to(device)   
         optimizer.zero_grad()  
-        out = model(data_clone)
+        out = model(data_clone.x)
         targets = data_clone.y
 
         if criterion == 'MSE' or criterion == 'MSE_weighted':
