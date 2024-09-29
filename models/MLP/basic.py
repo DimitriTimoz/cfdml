@@ -16,6 +16,61 @@ from torch_geometric.data import Data
 from sklearn.utils.validation import check_is_fitted
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
+def pinn_loss_navier_stokes(pred, features):
+    """Loss function for the Navier-Stokes equation
+
+    Args:
+        pred (torch.Tensor(N, 4)): Predicted values of the model denormalized
+        pos (torch.Tensor(N, 2)): Position of the nodes
+
+    Returns:
+        torch.Tensor: Loss value
+    """
+
+    u = pred[:, 0]
+    v = pred[:, 1]
+    p = pred[:, 2]
+    nut = pred[:, 3]
+        
+    x = features[:, 0]
+    y = features[:, 1]
+    
+
+    rho_inv = 1.0/1.225
+
+    mu = 1.55e-5
+
+    u_x = torch.autograd.grad(u, x, torch.ones_like(u), create_graph=True)[0]
+    v_y = torch.autograd.grad(v, y, torch.ones_like(v), create_graph=True)[0]
+    
+    u_y = torch.autograd.grad(u, y, torch.ones_like(u), create_graph=True)[0]
+    v_x = torch.autograd.grad(v, x, torch.ones_like(v), create_graph=True)[0]
+    
+    p_x = torch.autograd.grad(p, x, torch.ones_like(p), create_graph=True)[0]
+    p_y = torch.autograd.grad(p, y, torch.ones_like(p), create_graph=True)[0]
+    
+    u_xx = torch.autograd.grad(u_x, x, torch.ones_like(u_x), create_graph=False)[0]
+    v_yy = torch.autograd.grad(v_y, y, torch.ones_like(v_y), create_graph=False)[0]
+    
+    u_yy = torch.autograd.grad(u_y, y, torch.ones_like(u_y), create_graph=False)[0]
+    v_xx = torch.autograd.grad(v_x, x, torch.ones_like(v_x), create_graph=False)[0]
+    
+    nut_x = torch.autograd.grad(nut, x, torch.ones_like(nut), create_graph=False)[0]
+    nut_y = torch.autograd.grad(nut, y, torch.ones_like(nut), create_graph=False)[0]
+    
+    
+    laplace_u = u_xx + v_yy
+    
+    r1 = u_x + v_y
+    
+    r2 = u*u_x + v*u_y + p_x*rho_inv - (mu + nut)*(u_xx + u_yy) - (nut_x * u_x + nut_y * u_y)
+    r3 = u*v_x + v*v_y + p_y*rho_inv - (mu + nut)*(v_xx + v_yy) - (nut_x * v_x + nut_y * v_y)
+    x.requires_grad_(False)
+    y.requires_grad_(False)
+
+    return torch.mean((r1**2 + r2**2 + r3**2 + laplace_u**2 + nut_x**2 + nut_y**2))
+
+
 class SharedMLP(nn.Module):
     def __init__(self, space_variable: int, hidden_layers: list = [64, 64], out_channels: int = 32, dropout: float = 0.15):
         # FIXME: Remove the necessity of using transpose
@@ -211,7 +266,6 @@ def global_train(device, train_dataset: DataLoader, network, hparams: dict, crit
             idx = random.sample(range(data_sampled.x.size(0)), hparams['subsampling'])
             idx = torch.tensor(idx)
 
-            data_sampled.pos = data_sampled.pos[idx]
             data_sampled.x = data_sampled.x[idx]
             data_sampled.y = data_sampled.y[idx]
             data_sampled.surf = data_sampled.surf[idx]
@@ -256,15 +310,18 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         data_clone = data.clone()
         data_clone = data_clone.to(device)   
         optimizer.zero_grad()  
-        out = model(data_clone.x.T)
-        targets = data_clone.y.to(device)
-
+        x = data_clone.x.T
+        x.requires_grad_(True)
+        out = model(x)
+        pinn_loss = pinn_loss_navier_stokes(out, x.T)
+        
+        targets = data_clone.y.to(device)   
         if criterion == 'MSE' or criterion == 'MSE_weighted':
             loss_criterion = nn.MSELoss(reduction = 'none')
         elif criterion == 'MAE':
             loss_criterion = nn.L1Loss(reduction = 'none')
         loss_per_var = loss_criterion(out, targets).mean(dim = 0)
-        total_loss = loss_per_var.mean()
+        total_loss = loss_per_var.mean() + 1.0*pinn_loss
         loss_surf_var = loss_criterion(out[data_clone.surf, :], targets[data_clone.surf, :]).mean(dim = 0)
         loss_vol_var = loss_criterion(out[~data_clone.surf, :], targets[~data_clone.surf, :]).mean(dim = 0)
         loss_surf = loss_surf_var.mean()
