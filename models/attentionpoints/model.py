@@ -495,7 +495,7 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         iterNum += 1
     print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, Max memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
     print("Time for epoch: ", time.time()-start)
-    print("Loss: ", avg_loss.cpu().data.numpy()/iterNum, "Loss surf: ", avg_loss_surf.cpu().data.numpy()/iterNum, "Loss vol: ", avg_loss_vol.cpu().data.numpy()/iterNum, "Avg loss per var: ", avg_loss_per_var.cpu().data.numpy()/iterNum, "Loss surf var: ", avg_loss_surf_var.cpu().data.numpy()/iterNum, "Loss vol var: ", avg_loss_vol_var.cpu().data.numpy()/iterNum)
+    print("Loss: ", avg_loss.cpu().data.numpy()/iterNum, "Loss surf: ", avg_loss_surf.cpu().data.numpy()/iterNum, "Loss vol: ", avg_loss_vol.cpu().data.numpy()/iterNum, "Avg loss per var: ", avg_loss_per_var.cpu().data.numpy()/iterNum)
 
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
             avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum

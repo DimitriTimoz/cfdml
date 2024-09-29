@@ -96,6 +96,7 @@ def scoring(allmetrics):
     
     globalScore=100*(coefficients["ML"]*mlSubscore+coefficients["Physics"]*physicsSubscore+coefficients["OOD"]*oodSubscore)
     print(globalScore)
+    
 the_date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M")
 
 # =========================== BEGIN PROGRAM ================================
