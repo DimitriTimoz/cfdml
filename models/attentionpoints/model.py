@@ -100,8 +100,8 @@ class SharedMLP(nn.Module):
         for i in range(1, len(hidden_layers)):
             self.model.add_module(f"conv{i+1}", Conv1d(in_channels=hidden_layers[i-1], out_channels=hidden_layers[i], kernel_size=1))
             self.model.add_module(f"relu{i+1}", ReLU())
-            self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
-            self.model.add_module(f"dropout{i+1}", Dropout(dropout))
+            if i % 2 == 0:
+                self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
             
         if len(hidden_layers) > 0:
             self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
@@ -128,7 +128,6 @@ class TNet(nn.Module):
         self.mlp = SharedMLP(space_variable=k, hidden_layers=[64, 128], out_channels=1024)
         self.fc = nn.Sequential(
             nn.Linear(1024, 512),
-            nn.LayerNorm(512),
             nn.ReLU(),
             nn.Linear(512, 256),
             nn.LayerNorm(256),
@@ -162,9 +161,18 @@ class PointNetEncoder(nn.Module):
         self.device = device
         self.dim = dim
         self.output_channels = output_channels
+        self.mlp0 = torch.nn.Sequential(
+            Linear(self.dim, 64),
+            nn.ReLU(),
+            Linear(64, 64),
+            nn.ReLU(),
+            Linear(64, 64),
+            nn.ReLU(),
+            Linear(64, 32)
+        )
         
-        self.tnet1 = TNet(k=self.dim)
-        self.mlp1 = SharedMLP(space_variable=self.dim, hidden_layers=[64], out_channels=64)
+        self.tnet1 = TNet(k=32)
+        self.mlp1 = SharedMLP(space_variable=32, hidden_layers=[64], out_channels=64)
 
         self.tnet2 = TNet(k=64)
         self.mlp2 = SharedMLP(space_variable=64, hidden_layers=[128, 128], out_channels=self.output_channels)
@@ -181,10 +189,11 @@ class PointNetEncoder(nn.Module):
             torch.Tensor: Tensor of shape [N, num_attributes]
         """
          
-        features = features.T # Shape [num_features, N]
+        features = self.mlp0(features) # Shape [N, 32]
+        features = features.T # Shape [32, N]
         features_clone = features.clone()
-        features = self.tnet1(features) # Shape [num_features, num_features]
-        features = features.T@features_clone # Shape [N, num_features]
+        features = self.tnet1(features) # Shape [32, 32]
+        features = features.T@features_clone # Shape [N, 32]
         # Positional encoding
         features = self.mlp1(features) # Shape [N, 64]
         
@@ -208,16 +217,25 @@ class AttentionPoint(torch.nn.Module):
         self.device = device
         self.input_dim = input_dim 
         
-        self.sample_size = 3000
+        self.sample_size = 4000
         
         self.encoder = PointNetEncoder(device, dim=input_dim, output_channels=32)
         self.transf1 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
         self.transf2 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
         self.transf3 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
 
-        self.decoder = PointNetEncoder(device, dim=32, output_channels=num_attributes)
+        self.decoder = nn.Sequential(
+            Linear(32, 64),
+            nn.ReLU(),
+            Linear(64, 64),
+            nn.ReLU(),
+            Linear(64, 32),
+            nn.ReLU(),
+            Linear(32, 16),
+            nn.ReLU(),
+            Linear(16, num_attributes)
+        )
         
-
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """Forward pass of the model
 
@@ -364,7 +382,7 @@ class AugmentedSimulator():
         return processed
 
 
-def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg = 1):
+def global_train(device, train_dataset, network, hparams, criterion = 'MSE_weighted', reg = 0.3):
     model = network.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr = hparams['lr'])
     lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
@@ -400,7 +418,6 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
         del(train_dataset_sampled)
 
         train_loss, _, loss_surf_var, loss_vol_var, loss_surf, loss_vol = train_model(device, model, train_loader, optimizer, lr_scheduler, criterion, reg = reg)        
-        print('Train loss: ', train_loss)
         if criterion == 'MSE_weighted':
             train_loss = reg*loss_surf + loss_vol
         del(train_loader)
@@ -424,7 +441,8 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
     avg_loss_surf = 0
     avg_loss_vol = 0
     iterNum = 0
-    
+    start = time.time()
+
     for data in train_loader:
         data_clone = data.clone()
         data_clone = data_clone.to(device)   
@@ -457,6 +475,9 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         avg_loss_surf += loss_surf
         avg_loss_vol += loss_vol 
         iterNum += 1
+    print("GPU memory allocated: ", torch.cuda.memory_allocated(device)/1e9, "GB, Max memory allocated: ", torch.cuda.max_memory_allocated(device)/1e9, "GB")
+    print("Time for epoch: ", time.time()-start)
+    print("Loss: ", avg_loss.cpu().data.numpy()/iterNum, "Loss surf: ", avg_loss_surf.cpu().data.numpy()/iterNum, "Loss vol: ", avg_loss_vol.cpu().data.numpy()/iterNum, "Avg loss per var: ", avg_loss_per_var.cpu().data.numpy()/iterNum, "Loss surf var: ", avg_loss_surf_var.cpu().data.numpy()/iterNum, "Loss vol var: ", avg_loss_vol_var.cpu().data.numpy()/iterNum)
 
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
             avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum

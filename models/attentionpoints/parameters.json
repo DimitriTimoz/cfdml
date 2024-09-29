@@ -13,7 +13,7 @@
       "nb_epochs": 300,
       "lr": 0.001,
       "bn_bool": true,
-      "subsampling": 32000,
+      "subsampling": 64000,
       "patience": 10
     },
     "training_config": {}

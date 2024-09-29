@@ -101,7 +101,6 @@ class SharedMLP(nn.Module):
             self.model.add_module(f"conv{i+1}", Conv1d(in_channels=hidden_layers[i-1], out_channels=hidden_layers[i], kernel_size=1))
             self.model.add_module(f"relu{i+1}", ReLU())
             self.model.add_module(f"bn{i+1}", nn.BatchNorm1d(hidden_layers[i]))
-            self.model.add_module(f"dropout{i+1}", Dropout(dropout))
             
         if len(hidden_layers) > 0:
             self.model.add_module("conv_last", Conv1d(in_channels=hidden_layers[-1], out_channels=out_channels, kernel_size=1))
@@ -215,7 +214,13 @@ class AttentionPoint(torch.nn.Module):
         self.transf2 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
         self.transf3 = TransformerBlock(32, 32, yDIM=32, layers=[32, 64, 64, 64, 32])
 
-        self.decoder = PointNetEncoder(device, dim=32, output_channels=num_attributes)
+        self.decoder = nn.Sequential([
+            nn.Linear(32, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, num_attributes)  
+        ])
         
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
