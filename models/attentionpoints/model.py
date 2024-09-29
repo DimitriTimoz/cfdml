@@ -397,6 +397,10 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE_weigh
     loss_surf_var_list = []
     loss_vol_var_list = []
 
+    best_loss = float('inf')
+    patience = hparams.get('patience', 5)  # Set default patience if not provided
+    patience_counter = 0
+
     pbar_train = tqdm(range(hparams['nb_epochs']), position=0)
     epoch_nb = 0
 
@@ -420,12 +424,26 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE_weigh
         train_loss, _, loss_surf_var, loss_vol_var, loss_surf, loss_vol = train_model(device, model, train_loader, optimizer, lr_scheduler, criterion, reg = reg)        
         if criterion == 'MSE_weighted':
             train_loss = reg*loss_surf + loss_vol
+        
+            if train_loss < best_loss:
+                best_loss = train_loss
+                patience_counter = 0  # Reset counter if there's improvement
+                # Save the model or any other actions
+                torch.save(model.state_dict(), "best_model.pth")
+        else:
+            patience_counter += 1  # Increment counter if no improvement
+
         del(train_loader)
 
         train_loss_surf_list.append(loss_surf)
         train_loss_vol_list.append(loss_vol)
         loss_surf_var_list.append(loss_surf_var)
         loss_vol_var_list.append(loss_vol_var)
+        
+        if patience_counter >= patience:
+            print(f"Early stopping activated. No improvement for {patience} epochs.")
+            break
+
 
     loss_surf_var_list = np.array(loss_surf_var_list)
     loss_vol_var_list = np.array(loss_vol_var_list)
