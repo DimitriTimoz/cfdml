@@ -9,7 +9,93 @@ import importlib
 import pandas as pd
 from torch_geometric.loader import DataLoader
 import torch
+import math
+thresholds={"x-velocity":(0.01,0.02,"min"),
+            "y-velocity":(0.01,0.02,"min"),
+            "pressure":(0.002,0.01,"min"),
+            "pressure_surfacic":(0.008,0.02,"min"),
+            "turbulent_viscosity":(0.05,0.1,"min"),
+            "mean_relative_drag":(0.4,5.0,"min"),
+            "mean_relative_lift":(0.1,0.3,"min"),
+            "spearman_correlation_drag":(0.8,0.9,"max"),
+            "spearman_correlation_lift":(0.96,0.99,"max")          
+}
 
+
+configuration={
+    "coefficients":{"ML":0.4,"OOD":0.3,"Physics":0.3},
+    "ratioRelevance":{"Speed-up":0.0,"Accuracy":1.0},
+    "valueByColor":{"g":2,"o":1,"r":0},
+    "maxSpeedRatioAllowed":10000
+}
+
+def scoring(allmetrics):
+    accuracyResults=dict()
+    speedUp= {"ML":1,"OOD":1}
+    
+    for subcategoryName, subcategoryVal in allmetrics.items():
+        accuracyResults[subcategoryName]=[]
+        for variableName, variableError in subcategoryVal.items():
+            thresholdMin,thresholdMax,evalType=thresholds[variableName]
+            if evalType=="min":
+                if variableError<thresholdMin:
+                    accuracyEval="g"
+                elif thresholdMin<variableError<thresholdMax:
+                    accuracyEval="o"
+                else:
+                    accuracyEval="r"
+            elif evalType=="max":
+                if variableError<thresholdMin:
+                    accuracyEval="r"
+                elif thresholdMin<variableError<thresholdMax:
+                    accuracyEval="o"
+                else:
+                    accuracyEval="g"
+
+            accuracyResults[subcategoryName].append(accuracyEval)
+
+    def SpeedMetric(speedUp,speedMax):
+        return max(min(math.log10(speedUp)/math.log10(speedMax),1),0)
+
+    coefficients=configuration["coefficients"]
+    ratioRelevance=configuration["ratioRelevance"]
+    valueByColor=configuration["valueByColor"]
+    maxSpeedRatioAllowed=configuration["maxSpeedRatioAllowed"]
+    
+    mlSubscore=0
+
+    #Compute accuracy
+    accuracyMaxPoints=ratioRelevance["Accuracy"]
+    accuracyResult=sum([valueByColor[color] for color in accuracyResults["ML"]])
+    accuracyResult=accuracyResult*accuracyMaxPoints/(len(accuracyResults["ML"])*max(valueByColor.values()))
+    mlSubscore+=accuracyResult
+
+    #Compute speed-up
+    speedUpMaxPoints=ratioRelevance["Speed-up"]
+    speedUpResult=SpeedMetric(speedUp=speedUp["ML"],speedMax=maxSpeedRatioAllowed)
+    speedUpResult=speedUpResult*speedUpMaxPoints
+    mlSubscore+=speedUpResult
+    
+    accuracyResult=sum([valueByColor[color] for color in accuracyResults["Physics"]])
+    accuracyResult=accuracyResult/(len(accuracyResults["Physics"])*max(valueByColor.values()))
+    physicsSubscore=accuracyResult
+
+    oodSubscore=0
+
+    #Compute accuracy
+    accuracyMaxPoints=ratioRelevance["Accuracy"]
+    accuracyResult=sum([valueByColor[color] for color in accuracyResults["OOD"]])
+    accuracyResult=accuracyResult*accuracyMaxPoints/(len(accuracyResults["OOD"])*max(valueByColor.values()))
+    oodSubscore+=accuracyResult
+
+    #Compute speed-up
+    speedUpMaxPoints=ratioRelevance["Speed-up"]
+    speedUpResult=SpeedMetric(speedUp=speedUp["OOD"],speedMax=maxSpeedRatioAllowed)
+    speedUpResult=speedUpResult*speedUpMaxPoints
+    oodSubscore+=speedUpResult
+    
+    globalScore=100*(coefficients["ML"]*mlSubscore+coefficients["Physics"]*physicsSubscore+coefficients["OOD"]*oodSubscore)
+    print(globalScore)
 the_date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M")
 
 # =========================== BEGIN PROGRAM ================================
@@ -355,6 +441,7 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
         os.makedirs(output_dir)
  
     json_metrics = json.dumps(simulator_metrics, indent=4)
+    scoring(json_metrics)
     # Writing to sample.json
     with open(os.path.join(output_dir, 'json_metrics.json'), "w") as outfile:
         outfile.write(json_metrics)
