@@ -34,7 +34,8 @@ class DelaunayTransform(BaseTransform):
         tri = Delaunay(points)
         # Extract edges from the simplices
         edges = set()
-        for simplex in tri.simplices:
+        mask = np.full(tri.simplices.shape[0], True)
+        for i, simplex in enumerate(tri.simplices):
             # Each simplex is a triangle represented by three vertex indices    
             allOnSurf = True
             for i in range(3):
@@ -45,7 +46,9 @@ class DelaunayTransform(BaseTransform):
                 edges.add(tuple(sorted([simplex[0], simplex[1]])))
                 edges.add(tuple(sorted([simplex[0], simplex[2]])))
                 edges.add(tuple(sorted([simplex[1], simplex[2]])))
-
+            else:
+                mask[i] = False
+        tri.simplices = tri.simplices[mask]
         # Convert set of edges to a list
         edge_index = np.array(list(edges)).T  # Shape: (2, num_edges)
 
@@ -60,5 +63,5 @@ class DelaunayTransform(BaseTransform):
         # Update the Data object
         data.edge_index = edge_index
         data.edge_attr = np.zeros((edge_index.shape[1], 1))
-
+        data.simplices = tri.simplices
         return data
