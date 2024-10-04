@@ -43,8 +43,11 @@ class DelaunayTransform(BaseTransform):
                     break
             if not allOnSurf:
                 edges.add(tuple(sorted([simplex[0], simplex[1]])))
+                edges.add(tuple(sorted([simplex[1], simplex[0]])))
                 edges.add(tuple(sorted([simplex[0], simplex[2]])))
+                edges.add(tuple(sorted([simplex[2], simplex[0]])))
                 edges.add(tuple(sorted([simplex[1], simplex[2]])))
+                edges.add(tuple(sorted([simplex[2], simplex[1]])))
         # Convert set of edges to a list
         edge_index = np.array(list(edges)).T  # Shape: (2, num_edges)
 

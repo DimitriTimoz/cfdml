@@ -3,6 +3,9 @@
 #!pip install torch_geometric
 #!pip install pyvista
 #%pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-2.0.1+cpu.html
+import pyvista as pv
+print(pv.Report())
+
 
 # %%
 import torch
@@ -37,13 +40,13 @@ def plot_graph(data, l=1, plotter=None):
     edges = data.edge_index.t().numpy()
     lines = np.hstack([np.full((edges.shape[0], 1), 2), edges]).ravel()
     mesh.lines = lines
-    p.add_mesh(mesh, color=random.choice(c))
+    p.add_mesh(mesh)
     
     if plotter is None:
         p.show()
 
 # %%
-plot_graph(data)
+#plot_graph(data)
 
 # %%
 import time
@@ -105,7 +108,6 @@ clusters = divide_mesh(data.pos, data.edge_index.T, 8)
 clusters
 
 # %%
-%%time
 
 import torch
 from torch_cluster import grid_cluster
@@ -139,7 +141,7 @@ def generate_coarse_graph(data, r):
 
     # Interpolate the other features accordingly to the position    
     surf = scatter(data.surf.to(torch.int), new_index, reduce='max')
-    edge_index = torch.stack([new_index+data.num_nodes, torch.arange(0, new_index.shape[0])], dim=0)
+    edge_index = torch.stack([new_index.clone() + data.x.shape[0], torch.arange(0, new_index.shape[0])], dim=0)
     
     #edge_clusters = divide_mesh(out_positions.t(), edge_index, 6)
     return transform(Data(pos=out_positions.t()[:, :2], x=out_x.t(), surf=surf)), edge_index
@@ -148,21 +150,32 @@ def generate_coarse_graphs(data, R: int):
     range_ = 5000
     base = data.clone()
     base.pos = torch.concatenate([base.pos, torch.full((base.pos.shape[0], 1), 1)], axis=1)
+    s = [base.pos.shape[0]]
     for i in range(2, R+1):
-        subgraph, connection_index = generate_coarse_graph(data, range_//(5**i)) # TODO: choose the right scale factor
-        subgraph.pos = torch.concatenate([subgraph.pos, torch.full((subgraph.pos.shape[0], 1), i)], axis=1)
+        subgraph, connection_index = generate_coarse_graph(data, range_//(7**i)) # TODO: choose the right scale factor
+        data = subgraph.clone()
+        s.append(subgraph.pos.shape[0])
+        # We got the subgraph with new positions of the new layer and edges
+        
+        # We need to add the new dimension to the positions to visualize them
+        subgraph.pos = torch.concatenate([subgraph.pos, torch.full((subgraph.pos.shape[0], 1), i)], axis=1) # TODO: remove it
+        
+        # We need to add the new edges to the base graph so the new nodes ids have to be shifted by the number of nodes in the base graph
         subgraph.edge_index = torch.add(subgraph.edge_index, base.pos.shape[0])
 
-        connection_index = torch.add(connection_index, base.pos.shape[0])
-        data = subgraph.clone()
+        # We need to connect the new nodes to the base graph nodes
+        connection_index = torch.add(connection_index, sum(s[:-2]))
+
         base.pos = torch.cat([base.pos, subgraph.pos], dim=0)
+        base.surf = torch.cat([base.surf, subgraph.surf], dim=0)
+        base.x = torch.cat([base.x, subgraph.x], dim=0)
 
-        base.edge_index = torch.cat([base.edge_index, subgraph.edge_index], dim=1)
-        base.edge_index = torch.cat([base.edge_index, connection_index ], dim=1)
-
+        base.edge_index = torch.cat([base.edge_index.clone(), subgraph.edge_index.clone()], dim=1)
+        base.edge_index = torch.cat([base.edge_index.clone(), connection_index.clone() ], dim=1)
     return base
-b = generate_coarse_graphs(data, 3)
-print(b, flush=True)
+b = generate_coarse_graphs(data, 4)
+print("Final graph", b, flush=True)
 plot_graph(b)
+
 
 
