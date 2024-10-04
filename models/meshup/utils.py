@@ -28,7 +28,7 @@ class DelaunayTransform(BaseTransform):
         """            
         
         # Convert node features to NumPy array
-        points = data.pos
+        points = data.pos.cpu().numpy()
 
         # Perform Delaunay triangulation
         tri = Delaunay(points)
@@ -52,7 +52,7 @@ class DelaunayTransform(BaseTransform):
         edge_index = np.array(list(edges)).T  # Shape: (2, num_edges)
 
         # Convert edge_index to torch tensor
-        edge_index = torch.tensor(edge_index, dtype=torch.long)
+        edge_index = torch.tensor(edge_index, dtype=torch.long, device=data.pos.device)
 
         # Optionally, you can compute edge attributes here (e.g., Euclidean distances)
         # For example:
