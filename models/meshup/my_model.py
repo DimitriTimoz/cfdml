@@ -258,6 +258,7 @@ class UaMgnn(nn.Module):
                 # We initiate e_{i,j}^{r,r+1} by edge encoder;
                 up_scale_edge_range = data.up_scale_edge_ranges[ir-1]
                 up_scale_edge_attributes = edges_attr[up_scale_edge_range[0]:up_scale_edge_range[1]] 
+                print("edge_attr ", torch.isnan(up_scale_edge_attributes).sum())
                 up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
 
                 # Update v_[j]^{r+1} by up-sampling on e_{i,j}^{r,r+1} and v_{i}^{r}
