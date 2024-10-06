@@ -256,7 +256,7 @@ class UaMgnn(nn.Module):
             
             if r < self.R - 1:
                 # We initiate e_{i,j}^{r,r+1} by edge encoder;
-                up_scale_edge_range = data.up_scale_edge_ranges[ir-1]
+                up_scale_edge_range = data.up_scale_edge_ranges[r]
                 up_scale_edge_attributes = edges_attr[up_scale_edge_range[0]:up_scale_edge_range[1]] 
                 up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
 
