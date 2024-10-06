@@ -205,9 +205,14 @@ criterion = torch.nn.MSELoss()
 
 print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
 y = None
-with torch.autograd.profiler.profile(use_cuda=True, record_shapes=True) as prof:
+with torch.autograd.profiler.profile(use_cuda=True, record_shapes=True, with_stack=True) as prof:
     y = model(b)
-print(prof.key_averages().table(sort_by="cuda_time_total"))
+prof.export_chrome_trace("trace.json")
+print(prof.key_averages(group_by_stack_n=5).table(sort_by="self_cuda_time_total", row_limit=2))
+
+print(prof.key_averages(group_by_input_shape=True).table(sort_by="cuda_time_total"))
+print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
+
 print(torch.isnan(y).sum())
 print(y.shape)
 loss = criterion(y, torch.ones_like(y))
