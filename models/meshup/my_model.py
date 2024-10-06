@@ -267,8 +267,9 @@ class UaMgnn(nn.Module):
                
                 up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - pf_node_indices_range[0]
                 print("before up", torch.isnan(nodes_embedding_up_sampling).sum())
-                mp_output = self.up_sampling_processors[r](nodes_embedding_up_sampling, up_scale_edge_index , up_scale_edge_embeddings)[:pf_node_indices_range[1]-pf_node_indices_range[0]] # Useless computation to fix
-                print("after up", torch.isnan(mp_output).sum(), torch.isnan(nodes_embedding_up_sampling).sum())
+                print("before up edge embeddings", torch.isnan(up_scale_edge_index).sum())
+                mp_output = self.up_sampling_processors[r](nodes_embedding_up_sampling, up_scale_edge_index, up_scale_edge_embeddings)[:pf_node_indices_range[1]-pf_node_indices_range[0]] # Useless computation to fix
+                print("after up", torch.isnan(mp_output).sum())
                 node_embedding[pf_node_indices_range[0]:pf_node_indices_range[1]]  = mp_output
             print("At step r =", r, torch.isnan(node_embedding).sum())
         print("before decoder", torch.isnan(node_embedding).sum())
