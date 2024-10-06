@@ -194,7 +194,7 @@ class UaMgnn(nn.Module):
         self.K = K
         self.node_encoder = NodeEncoder(in_dim, 128, self.device)
         
-        self.up_sampling_edge_encoder = torch.nn.ModuleList([EdgeEncoder(3, 128, self.device) for _ in range(R-1)])
+        self.up_sampling_edge_encoder = torch.nn.ModuleList([EdgeEncoder(2, 128, self.device) for _ in range(R-1)])
         self.subgraph_edge_encoders =  torch.nn.ModuleList([torch.nn.ModuleList([EdgeEncoder(3, 128, self.device) for _ in range(K)]) for _ in range(R)])
 
         self.node_decoder = Decoder(128, out_dim, device)
@@ -214,7 +214,6 @@ class UaMgnn(nn.Module):
         # Compute the default edge attributes TODO: post_processing
         edge_directions = data.pos[data.edge_index[1]][:, :2] - data.pos[data.edge_index[0]][:, :2]
         edge_norms = torch.norm(edge_directions, dim=1, keepdim=True)
-        print("edge_norms", torch.min(edge_norms))
         edge_directions = edge_directions / edge_norms
         edges_attr = torch.cat([edge_directions, edge_norms], dim=1)
 
@@ -258,7 +257,7 @@ class UaMgnn(nn.Module):
             if r < self.R - 1:
                 # We initiate e_{i,j}^{r,r+1} by edge encoder;
                 up_scale_edge_range = data.up_scale_edge_ranges[ir-1]
-                up_scale_edge_attributes = edges_attr[up_scale_edge_range[0]:up_scale_edge_range[1]] 
+                up_scale_edge_attributes = edge_directions[up_scale_edge_range[0]:up_scale_edge_range[1]] 
                 print("edge_attr ", torch.isnan(up_scale_edge_attributes).sum())
                 up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
 
