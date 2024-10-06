@@ -265,6 +265,8 @@ class UaMgnn(nn.Module):
                 mf_node_indices_range = data.layer_ranges[ir]
                 nodes_embedding_up_sampling = node_embedding[pf_node_indices_range[0]:mf_node_indices_range[1]]
                
+                print("Up scale edge", up_scale_edge_range[0], up_scale_edge_range[1])
+                print("Edge index", data.edge_index.shape) 
                 print("Nombre noeuds dans plus fin", pf_node_indices_range[1]-pf_node_indices_range[0], "range", pf_node_indices_range)
                 print("Nombre noeuds dans moins fin", mf_node_indices_range[1]-mf_node_indices_range[0], "range", mf_node_indices_range)
                 up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] #- pf_node_indices_range[0]
