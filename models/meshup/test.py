@@ -205,6 +205,7 @@ criterion = torch.nn.MSELoss()
 
 print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
 y = model(b)
+print(torch.isnan(y).sum())
 print(y.shape)
 loss = criterion(y, torch.ones_like(y))
 loss.backward()
