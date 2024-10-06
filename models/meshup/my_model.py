@@ -261,12 +261,13 @@ class UaMgnn(nn.Module):
                 up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
 
                 # Update v_[j]^{r+1} by up-sampling on e_{i,j}^{r,r+1} and v_{i}^{r}
-                r_p_1_node_indices_range = data.layer_ranges[ir-1]
-                nodes_embedding_r_p_1= node_embedding[r_p_1_node_indices_range[0]:r_p_1_node_indices_range[1]]
+                pf_node_indices_range = data.layer_ranges[ir-1]
+                mf_node_indices_range = data.layer_ranges[ir]
+                nodes_embedding_up_sampling = node_embedding[mf_node_indices_range[0]:pf_node_indices_range[1]]
                 
-                up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - r_p_1_node_indices_range[0]
-                
-                node_embedding[r_p_1_node_indices_range[0]:r_p_1_node_indices_range[1]] = self.up_sampling_processors[ir](nodes_embedding_r_p_1, up_scale_edge_index , up_scale_edge_embeddings)
+                up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - mf_node_indices_range[0]
+
+                node_embedding[pf_node_indices_range[0]:pf_node_indices_range[1]] = self.up_sampling_processors[ir](nodes_embedding_up_sampling, up_scale_edge_index , up_scale_edge_embeddings)
         
         return self.node_decoder(node_embedding[:data.layer_ranges[0][1]])
         
