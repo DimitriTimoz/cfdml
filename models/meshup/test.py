@@ -181,6 +181,7 @@ b = generate_coarse_graphs(data.cpu(), 3, 5, visualize=True).to(device)
 
 # %%
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 b = b.to(device)
 b.layer_ranges
 
@@ -197,6 +198,16 @@ importlib.reload(my_model)
 import time
 start = time.time()
 model = my_model.UaMgnn(5, 4, R=3, K=5, device=device)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer.zero_grad()
+
+criterion = torch.nn.MSELoss()
+
 print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
-print(model(b).shape)
+y = model(b)
+print(y.shape)
+loss = criterion(y, torch.ones_like(y))
+loss.backward()
+optimizer.step()
 print("Time: ", time.time()-start)
+print("Loss: ", loss.item())
