@@ -254,5 +254,5 @@ class UaMgnn(nn.Module):
                 new_node_embedding_r = torch.stack(new_node_embedding_r)
                 node_embedding[r_node_indices_range[0]:r_node_indices_range[1]] = torch.sum(new_node_embedding_r, dim=0)
             print("one R done")
-        return self.node_decoder(node_embedding)
+        return self.node_decoder(node_embedding[:data.layer_ranges[0][1]])
         
