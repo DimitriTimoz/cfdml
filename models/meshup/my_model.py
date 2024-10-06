@@ -194,7 +194,7 @@ class UaMgnn(nn.Module):
         self.K = K
         self.node_encoder = NodeEncoder(in_dim, 128, self.device)
         
-        self.up_sampling_edge_encoder = torch.nn.ModuleList([EdgeEncoder(3, 128, self.device) for _ in range(R)])
+        self.up_sampling_edge_encoder = torch.nn.ModuleList([EdgeEncoder(3, 128, self.device) for _ in range(R-1)])
         self.subgraph_edge_encoders =  torch.nn.ModuleList([torch.nn.ModuleList([EdgeEncoder(3, 128, self.device) for _ in range(K)]) for _ in range(R)])
 
         self.node_decoder = Decoder(128, out_dim, device)
@@ -247,12 +247,20 @@ class UaMgnn(nn.Module):
                 edge_embedding_rk = edge_embedding[edge_indices_of_k]
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
-                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk)
+                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk.clone())
                 new_node_embedding_r[k][nodes_of_k_in_r] = node_embeddings_rk
             # Aggregate the node node_embedding_r
             if n_mp_lk > 0:
                 new_node_embedding_r = torch.stack(new_node_embedding_r)
                 node_embedding[r_node_indices_range[0]:r_node_indices_range[1]] = torch.sum(new_node_embedding_r, dim=0)
             print("one R done")
+            if r < self.R - 1:
+                # We initiate e_{i,j}^{r,r+1} by edge encoder;
+                up_scale_edge_range = data.up_scale_edge_ranges[ir]
+                up_scale_edge_attributes = edges_attr[up_scale_edge_range[0]:up_scale_edge_range[1]] 
+                up_scale_edge_embeddings = self.up_sampling_edge_encoder[ir](up_scale_edge_attributes)
+                print("Up scaling, encoder, shape of up_scale_edge_embeddings", up_scale_edge_embeddings.shape)
+                #self.up_sampling_edge_encoder
+        
         return self.node_decoder(node_embedding[:data.layer_ranges[0][1]])
         

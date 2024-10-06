@@ -11,20 +11,11 @@ from utils import DelaunayTransform
 from torch_geometric.data import Data
 import numpy as np
 
-# %%
-N = 1000
-pos = torch.rand((N, 2))
-data = Data(pos=pos, surf=torch.full((N, 1), False))
-transform = DelaunayTransform()
-data = transform(data)
-data.pos = pos
-
 data = torch.load('./sampleData.pth')
 data.edge_index = np.empty((2, 0))
 transform = DelaunayTransform()
 data = transform(data)
-# %%
-#plot_graph(data)
+
 device = torch.device('cuda')
 data = data.to(device)
 
@@ -85,10 +76,7 @@ def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int, verbose=False):
 
 
 data.pos = data.pos[:, :2]
-clusters, nodes, centroids, angles = divide_mesh(data.pos, data.edge_index.T, 6, verbose=True)
-for c in clusters:
-    print(torch.min(c))
-#print(angles)
+
 
 # %%
 import torch
