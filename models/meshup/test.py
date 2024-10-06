@@ -164,9 +164,9 @@ def generate_coarse_graphs(data, R: int, K: int, visualize=False):
         base.x = torch.cat([base.x, subgraph.x], dim=0)
         base.edge_index = torch.cat([base.edge_index, subgraph.edge_index, connection_index], dim=1)
         
-        base.up_scale_edge_ranges[i-2] = torch.tensor([base.edge_index.shape[0]-connection_index.shape[1], base.edge_index.shape[0]], device=base.pos.device)
+        base.up_scale_edge_ranges[i-2] = torch.tensor([base.edge_index.shape[1]-connection_index.shape[1], base.edge_index.shape[1]], device=base.pos.device)
         base.layer_ranges[i-1] = torch.tensor([base.pos.shape[0]-subgraph.pos.shape[0]-1, base.pos.shape[0]], device=base.pos.device)
-        print("Layer range", base.up_scale_edge_ranges[i-2], flush=True)
+        print("up_scale_edge_ranges ", base.up_scale_edge_ranges[i-2], flush=True)
         if i >= R:
             last_one_frequencies = torch.full((K,), 1, device=base.pos.device, dtype=torch.int) 
             base.edge_frequencies.append(last_one_frequencies)
