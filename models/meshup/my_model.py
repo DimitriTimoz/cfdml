@@ -226,7 +226,7 @@ class UaMgnn(nn.Module):
             r_node_indices_range = data.layer_ranges[ir]
             nodes_embedding_r = node_embedding[r_node_indices_range[0]:r_node_indices_range[1]]
             new_node_embedding_r = [torch.empty((nodes_embedding_r.shape[0], 128), device=self.device) for _ in range(self.K)]
-            for k in range(self.K-1, -1, -1): # the 𝑘-th subgraph
+            for k in range(self.K): # the 𝑘-th subgraph
                 edge_indices_of_k = data.clusters[ir*self.K + k]
                 edges_attr_rk_cluster = edges_attr[edge_indices_of_k]
                 # Initiate e_{i,j}^{r,k} by edge encoder; 
@@ -253,12 +253,12 @@ class UaMgnn(nn.Module):
             if n_mp_lk > 0:
                 new_node_embedding_r = torch.stack(new_node_embedding_r)
                 node_embedding[r_node_indices_range[0]:r_node_indices_range[1]] = torch.sum(new_node_embedding_r, dim=0)
-            print("one R done")
+            
             if r < self.R - 1:
                 # We initiate e_{i,j}^{r,r+1} by edge encoder;
-                up_scale_edge_range = data.up_scale_edge_ranges[ir]
+                up_scale_edge_range = data.up_scale_edge_ranges[ir-1]
                 up_scale_edge_attributes = edges_attr[up_scale_edge_range[0]:up_scale_edge_range[1]] 
-                up_scale_edge_embeddings = self.up_sampling_edge_encoder[ir](up_scale_edge_attributes)
+                up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
                 print("Up scaling, encoder, shape of up_scale_edge_embeddings", up_scale_edge_embeddings.shape)
                 #self.up_sampling_edge_encoder
         
