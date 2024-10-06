@@ -4,39 +4,7 @@ from torch_geometric.nn import  MessagePassing
 from torch_geometric.data import Data, Batch
 from torch import Tensor
 from torch_geometric.utils import add_self_loops
-import pyvista as pv
-import numpy as np
-def plot_graph(data, l=1, plotter=None, node_colors=None):
-    
-    c = ['r', 'g', 'b', 'm']
-    
-    p = pv.Plotter() if plotter is None else plotter
-    
-    # Création d'un PolyData pour les points (nœuds)
-    mesh = pv.PolyData()
-    
-    # Gestion des dimensions des positions
-    if data.pos.shape[1] != 3:
-        # Ajouter une troisième dimension si nécessaire
-        mesh.points = np.concatenate([data.pos.cpu().numpy(), np.full((data.pos.shape[0], 1), l)], axis=1)
-    else:
-        mesh.points = data.pos.cpu().numpy()
 
-    # Création des lignes pour les arêtes
-    edges = data.edge_index.t().cpu().numpy()
-    lines = np.hstack([np.full((edges.shape[0], 1), 2), edges]).ravel()
-    mesh.lines = lines
-    
-    
-    # Ajout des couleurs au PolyData
-    mesh.point_data['values'] = node_colors if node_colors is not None else np.random.randint(0, 255, size=(data.pos.shape[0], 3))
-    
-    # Ajouter le mesh avec les couleurs des nœuds
-    p.add_mesh(mesh, scalars='values', line_width=0.5, point_size=0.3, render_points_as_spheres=True)
-
-    # Si aucun plotter n'a été fourni, on montre la figure
-    if plotter is None:
-        p.show()
 # 
 # ENCODER ::::
 # Pour chaque edge on encode une représentation de l'edge à partir de son vecteur directeur et sa norme dans un espace de taille 128, à vérifier ?
@@ -56,6 +24,8 @@ def plot_graph(data, l=1, plotter=None, node_colors=None):
 # Pour chaque node on décode une représentation du node à partir de ses features et des features des edges dans un espace de la taille des features à prédire
 #
 
+REDUCE_F = 4
+
 class EdgeEncoder(nn.Module):
     def __init__(self, in_dim, out_dim, device = 'cpu'):
         super().__init__()
@@ -63,9 +33,9 @@ class EdgeEncoder(nn.Module):
         self.device = device
         self.out_dim = out_dim
         self.model = nn.Sequential(
-            nn.Linear(in_dim, 128),
+            nn.Linear(in_dim, 128//REDUCE_F),
             nn.ReLU(),
-            nn.Linear(128, out_dim)
+            nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
     def forward(self, data: Data) -> Tensor:
@@ -78,9 +48,9 @@ class NodeEncoder(nn.Module):
         self.device = device
         self.out_dim = out_dim
         self.model = nn.Sequential(
-            nn.Linear(in_dim, 128),
+            nn.Linear(in_dim, 128//REDUCE_F),
             nn.ReLU(),
-            nn.Linear(128, out_dim)
+            nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
     def forward(self, data: Data) -> Tensor:
@@ -93,9 +63,9 @@ class Decoder(nn.Module):
         self.device = device
         self.out_dim = out_dim
         self.model = nn.Sequential(
-            nn.Linear(in_dim, 128),
+            nn.Linear(in_dim, 128//REDUCE_F),
             nn.ReLU(),
-            nn.Linear(128, out_dim)
+            nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
     def forward(self, node_embedding: Tensor) -> Tensor:
@@ -163,14 +133,14 @@ class Processor(MessagePassing):
     def __init__(self, in_dim, out_dim):
         super().__init__(aggr='add')  # or 'add', 'max', etc.
         self.edge_mlp = nn.Sequential(
-            nn.Linear((2 * in_dim) + out_dim, 512),
+            nn.Linear((2 * in_dim) + out_dim, 512//REDUCE_F),
             nn.ReLU(),
-            nn.Linear(512, out_dim)
+            nn.Linear(512//REDUCE_F, out_dim)
         )
         self.node_mlp = nn.Sequential(
-            nn.Linear(in_dim + out_dim, 512),
+            nn.Linear(in_dim + out_dim, 512//REDUCE_F),
             nn.ReLU(),
-            nn.Linear(512, out_dim)
+            nn.Linear(512//REDUCE_F, out_dim)
         )
 
     def forward(self, x, edge_index, edge_attr):
@@ -247,16 +217,15 @@ class UaMgnn(nn.Module):
         edge_directions = edge_directions / edge_norms
         edges_attr = torch.cat([edge_directions, edge_norms], dim=1)
 
-        
         # Initiate {v^r}_i by node encoder for 1 ≤ 𝑟 ≤ 𝑅;
         node_embedding = self.node_encoder(data) # (N, 128)
         edge_embedding = torch.zeros((data.edge_index.shape[1], 128), device=self.device) # (E, 128)
-    
         for r in range(self.R): # the 𝑟-th mesh graph
             ir = self.R - r - 1 
             # We get the range of the edges in the layer r
             r_node_indices_range = data.layer_ranges[ir]
             nodes_embedding_r = node_embedding[r_node_indices_range[0]:r_node_indices_range[1]]
+            new_node_embedding_r = [torch.empty((nodes_embedding_r.shape[0], 128), device=self.device) for _ in range(self.K)]
             for k in range(self.K-1, -1, -1): # the 𝑘-th subgraph
                 edge_indices_of_k = data.clusters[ir*self.K + k]
                 edges_attr_rk_cluster = edges_attr[edge_indices_of_k]
@@ -269,7 +238,7 @@ class UaMgnn(nn.Module):
                 node_embeddings_rk = nodes_embedding_r[nodes_of_k_in_r]
                 
                 edge_index_rk_in_r = data.edge_index[:, edge_indices_of_k] - r_node_indices_range[0]
-                mask = torch.full((nodes_embedding_r.shape[0],), 1, dtype=torch.int32)
+                mask = torch.full((nodes_embedding_r.shape[0],), 1, dtype=torch.int32, device=self.device)
                 mask[nodes_of_k_in_r] = 0
                 
                 mask = torch.cumsum(mask, dim=0)
@@ -279,12 +248,11 @@ class UaMgnn(nn.Module):
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
                     node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk)
-            #new_node_embedding_r.append(node_embedding_rk)
+                new_node_embedding_r[k][nodes_of_k_in_r] = node_embeddings_rk
             # Aggregate the node node_embedding_r
-            #if n_mp_lk > 0:
-            #    new_node_embedding_r = torch.stack(new_node_embedding_r)
-            #    print(node_embedding.shape)
-            #    node_embedding[nodes_of_r] = torch.mean(new_node_embedding_r, dim=0)
+            if n_mp_lk > 0:
+                new_node_embedding_r = torch.stack(new_node_embedding_r)
+                node_embedding[r_node_indices_range[0]:r_node_indices_range[1]] = torch.sum(new_node_embedding_r, dim=0)
             print("one R done")
         return self.node_decoder(node_embedding)
         

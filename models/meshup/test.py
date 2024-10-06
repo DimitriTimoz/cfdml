@@ -11,6 +11,7 @@ from utils import DelaunayTransform
 from torch_geometric.data import Data
 import pyvista as pv
 import numpy as np
+import matplotlib.pyplot as plt
 torch.__version__, pv.__version__
 
 # %%
@@ -23,6 +24,9 @@ data = transform(data)
 data.pos = pos
 
 data = torch.load('./sampleData.pth')
+data.edge_index = np.empty((2, 0))
+transform = DelaunayTransform()
+data = transform(data)
 def plot_graph(data, l=1, plotter=None, node_colors=None):
     
     c = ['r', 'g', 'b', 'm']
@@ -57,11 +61,11 @@ def plot_graph(data, l=1, plotter=None, node_colors=None):
 
 # %%
 #plot_graph(data)
+device = torch.device('cuda')
+data = data.to(device)
 
 # %%
-import time
-# TODO vérifier les direction des edges dans le papier
-def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int):
+def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int, verbose=False):
     """Divide a mesh into k clusters of edges according to their direction.
 
     Args:
@@ -75,7 +79,10 @@ def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int):
     clusters = [set() for _ in range(k)]
     
     # Randomly initialize centroids (2D points)
-    centroids = torch.rand((k, 2), device=v.device)
+    centroids = torch.deg2rad(torch.linspace(0, 360, k, device=v.device))
+    centroids = centroids.repeat(2, 1).T
+    centroids[0] = torch.sin(centroids[0])
+    centroids[1] = torch.cos(centroids[1])
 
     # Precompute edge directions and norms
     edges_directions = v[e[:, 1]] - v[e[:, 0]]
@@ -86,12 +93,12 @@ def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int):
         # Vectorized clustering step
         centroids_norms = torch.norm(centroids, dim=1, keepdim=True)  # Shape: [num_centroids, 1]
         cosine_angles = torch.matmul(edges_directions, centroids.T) / (centroids_norms.T)  # Shape: [num_edges, num_centroids]
-        angles = torch.acos(cosine_angles)  # Ensure values are in valid range for acos
-        min_edge_idxs = torch.argmin(angles, dim=1)  # Shape: [num_edges]
+        # We use directly the cosine because they have opposite variations
+        max_edge_idxs = torch.argmax(cosine_angles, dim=1)  # Shape: [num_edges]
         # Efficient assignment to clusters using torch
-        cluster_masks = [(min_edge_idxs == i) for i in range(k)]
+        cluster_masks = [(max_edge_idxs == i) for i in range(k)]
         for i in range(k):
-            clusters[i].update(torch.nonzero(cluster_masks[i]).squeeze(1).tolist())
+            clusters[i] = set((torch.nonzero(cluster_masks[i]).squeeze(1).tolist()))
 
         # Efficient centroid update
         n_m = 0.0
@@ -104,21 +111,40 @@ def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int):
         norm_changes = n_m
 
     # Post-process clusters to finalize edge indices
-    clusters = [torch.tensor(list(cluster), device=v.device) for cluster in clusters]
-    return clusters
+    clusters_edge_indices = [torch.tensor(list(cluster), device=v.device) for cluster in clusters]
+    nodes = [torch.unique(e[cluster].view(-1)) for cluster in clusters_edge_indices]
+    if verbose:
+        angles = torch.rad2deg(torch.atan(centroids[:, 1] / centroids[:, 0]))
+        return clusters_edge_indices, nodes, centroids, angles
+    else:
+        return clusters_edge_indices, nodes
 
 
-device = torch.device('cuda')
 data.pos = data.pos[:, :2]
-data = data.to(device) 
-clusters = divide_mesh(data.pos, data.edge_index.T, 8)
-clusters
+clusters, nodes, centroids, angles = divide_mesh(data.pos, data.edge_index.T, 6, verbose=True)
+for c in clusters:
+    print(torch.min(c))
+#print(angles)
+#col = ['r', 'g', 'b', 'm', 'y', 'c']
+#plt.figure(figsize=(12, 12))
+#for c in range(centroids.shape[0]):
+#    plt.scatter(data.pos[nodes[c], 0].cpu().numpy(), data.pos[nodes[c], 1].cpu().numpy(), s=0.1)
+#    edges = clusters[c]
+#    edges = data.edge_index[:, edges]
+#    edge_pos = data.pos[edges]
+#
+#    for i in range(edge_pos.shape[1]):
+#        plt.plot(edge_pos[:, i, 0].cpu().numpy(), edge_pos[:, i, 1].cpu().numpy(), c=col[c], linewidth=0.5)
+#plt.show()
+#for c in range(centroids.shape[0]):
+#    plt.quiver(0, 0, centroids[c, 0].cpu().numpy(), centroids[c, 1].cpu().numpy(), scale=1, scale_units='xy', angles='xy', color=col[c], label=f"{angles[c].item():.2f}°")
+#plt.legend()
+print(clusters)
 
 # %%
 import torch
 from torch_cluster import grid_cluster
 from torch_scatter import scatter
-import matplotlib.pyplot as plt
 
 def generate_coarse_graph(data, r, clusters_per_layer):
     """Generate a coarse graph from a fine graph.
@@ -145,25 +171,25 @@ def generate_coarse_graph(data, r, clusters_per_layer):
     
     out_x = scatter(data.x.t(), new_index, reduce='mean')
     
-    
     # Interpolate the other features accordingly to the position    
     surf = scatter(data.surf.to(torch.int), new_index, reduce='max')
-    connection_edge_index = torch.stack([new_index+data.num_nodes, torch.arange(0, new_index.shape[0], device=new_index.device)], dim=0)
+    connection_edge_index = torch.stack([new_index+data.pos.shape[0], torch.arange(0, new_index.shape[0], device=new_index.device)], dim=0)
     
     transform = DelaunayTransform()
     data = transform(Data(pos=out_positions.t()[:, :2].to(data.pos.device), x=out_x.t().to(data.pos.device), surf=surf, device=data.pos.device))
-    new_clusters = divide_mesh(data.pos, data.edge_index.T, clusters_per_layer)
+    new_clusters, new_cluster_nodes = divide_mesh(data.pos, data.edge_index.T, clusters_per_layer)
     s = torch.Tensor([c.shape[0] for c in new_clusters])
     
     # Average edges per coarse element in a subgraph
     m = torch.round(((torch.sum(counts)//(2*counts.shape[0]))*6)*(s/torch.sum(s))).int()
-    return data, connection_edge_index, new_clusters, m
+    return data, connection_edge_index, new_clusters, m, new_cluster_nodes
     
 def generate_coarse_graphs(data, R: int, K: int, visualize=False):
     data = data.cpu() # Quicker to compute on CPU
     range_ = 7500
-    edge_clusters = divide_mesh(data.pos, data.edge_index.T, K)
+    edge_clusters, new_cluster_nodes = divide_mesh(data.pos, data.edge_index.T, K)
     data.clusters = edge_clusters
+    data.node_clusters = new_cluster_nodes
     base = data.clone()
     base.R = R
     base.clusters_per_layer = K
@@ -175,14 +201,16 @@ def generate_coarse_graphs(data, R: int, K: int, visualize=False):
         base.pos = torch.concatenate([base.pos, torch.full((base.pos.shape[0], 1), 1, device=base.pos.device)], axis=1)
     s = [base.pos.shape[0]]
     for i in range(2, R+1):
-        subgraph, connection_index, new_clusters, edge_frequencies = generate_coarse_graph(data, range_//(5**i), base.clusters_per_layer) # TODO: choose the right scale factor
+        subgraph, connection_index, new_clusters_edges, edge_frequencies, new_cluster_nodes = generate_coarse_graph(data, range_//(5**i), base.clusters_per_layer) # TODO: choose the right scale factor
         base.edge_frequencies.append(edge_frequencies)
+        # We add the new node clusters indexed in the subgraph
+        base.node_clusters.extend(new_cluster_nodes)
+        # We add the new clusters edge indices indexed in the subgraph 
+        base.clusters.extend([c + base.edge_index.shape[1] for c in new_clusters_edges])
+
         data = subgraph.clone()
-        s.append(subgraph.pos.shape[0])
-        # We got the subgraph with new positions of the new layer and edges
+        s.append(subgraph.pos.shape[0])        
         
-        new_clusters = [torch.add(c, base.pos.shape[0]) for c in new_clusters]
-        subgraph.clusters = new_clusters
         
         # We need to add the new dimension to the positions to visualize them
         if visualize:
@@ -197,42 +225,72 @@ def generate_coarse_graphs(data, R: int, K: int, visualize=False):
         base.pos = torch.cat([base.pos, subgraph.pos], dim=0) # TODO: use barycentric interpolation
         base.surf = torch.cat([base.surf, subgraph.surf], dim=0) 
         base.x = torch.cat([base.x, subgraph.x], dim=0)
-        base.clusters.extend(subgraph.clusters)
         base.edge_index = torch.cat([base.edge_index, subgraph.edge_index, connection_index], dim=1)
         
         base.up_scale_edge_ranges[i-2] = torch.tensor([base.pos.shape[0]-connection_index.shape[1], base.pos.shape[0]], device=base.pos.device) # TODO: check it
         base.layer_ranges[i-1] = torch.tensor([base.pos.shape[0]-subgraph.pos.shape[0], base.pos.shape[0]], device=base.pos.device)
+        
+        if i >= R:
+            last_one_frequencies = torch.full((K,), 1, device=base.pos.device, dtype=torch.int) 
+            base.edge_frequencies.append(last_one_frequencies)
+            # TODO
     return base
 
 device = torch.device("cuda" if False else "cpu")
-b = generate_coarse_graphs(data.cpu(), 4, 6, visualize=True).to(device)
+b = generate_coarse_graphs(data.cpu(), 3, 5, visualize=True).to(device)
 #print("Final graph", b, flush=True)
-#plot_graph(b)
+plot_graph(b)
 
 
 # %%
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 b = b.to(device)
 b.layer_ranges
 
 # %%
 #%%timeit
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
 import importlib
 import my_model
 importlib.reload(my_model)
 
 # Reload the model
-model = my_model.UaMgnn(5, 4, R=3, K=6, device=device)
+model = my_model.UaMgnn(5, 4, R=3, K=5, device=device)
+print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
 model(b).shape
 
 # %%
-color = torch.tensor([0.0], device=device)
-colors = color.repeat(b.pos.shape[0], 1)
-colors[torch.logical_not(b.surf)] = torch.tensor([1.0], device=device)
-print(torch.mean(colors, dim=0), flush=True)
-plot_graph(b, l=1, node_colors=b.pos[:, 2].cpu().numpy())
+#color = torch.tensor([0.0], device=device)
+#colors = color.repeat(b.pos.shape[0], 1)
+#colors[torch.logical_not(b.surf)] = torch.tensor([1.0], device=device)
+#print(torch.mean(colors, dim=0), flush=True)
+#plot_graph(b, l=1, node_colors=colors.cpu().numpy())
+
 
 # %%
+edge_index = torch.IntTensor([
+    [0, 1, 2, 3],
+    [1, 2, 3, 4]
+])   
 
+node_index = torch.IntTensor([0, 1, 2, 3, 4])
+nodes_index_of_subgraph = torch.IntTensor([0, 1, 3, 4])
+edge_indices_of_subgraph = torch.IntTensor([0, 3])
+
+mask = torch.full((node_index.shape[0],), 1, dtype=torch.int32)
+mask[nodes_index_of_subgraph] = 0
+
+mask = torch.cumsum(mask, dim=0)
+edge_of_subgraph = edge_index[:, edge_indices_of_subgraph]
+for i in range(edge_of_subgraph.shape[0]):
+    edge_of_subgraph[i, 0] -= mask[edge_of_subgraph[i, 0]]
+    edge_of_subgraph[i, 1] -= mask[edge_of_subgraph[i, 1]]
+
+edge_of_subgraph
+
+# %% [markdown]
+# utiliser les mêmes offset que lors de l'initialisation pour obtenir les sous graphes
 
 
