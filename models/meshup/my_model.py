@@ -199,7 +199,7 @@ class UaMgnn(nn.Module):
 
         self.node_decoder = Decoder(128, out_dim, device)
         self.processors = torch.nn.ModuleList([torch.nn.ModuleList([Processor(128, 128) for _ in range(K)]) for _ in range(R)]).to(device)
-        
+        self.up_sampling_processors = torch.nn.ModuleList([Processor(128, 128) for _ in range(R-1)]).to(device)
         
     def forward(self, data: Data) -> Tensor:
         """Process the input graph
@@ -259,8 +259,14 @@ class UaMgnn(nn.Module):
                 up_scale_edge_range = data.up_scale_edge_ranges[ir-1]
                 up_scale_edge_attributes = edges_attr[up_scale_edge_range[0]:up_scale_edge_range[1]] 
                 up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
-                print("Up scaling, encoder, shape of up_scale_edge_embeddings", up_scale_edge_embeddings.shape)
-                #self.up_sampling_edge_encoder
+
+                # Update v_[j]^{r+1} by up-sampling on e_{i,j}^{r,r+1} and v_{i}^{r}
+                r_p_1_node_indices_range = data.layer_ranges[ir-1]
+                nodes_embedding_r_p_1= node_embedding[r_p_1_node_indices_range[0]:r_p_1_node_indices_range[1]]
+                
+                up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - r_p_1_node_indices_range[0]
+                
+                node_embedding[r_p_1_node_indices_range[0]:r_p_1_node_indices_range[1]] = self.up_sampling_processors[ir](nodes_embedding_r_p_1, up_scale_edge_index , up_scale_edge_embeddings)
         
         return self.node_decoder(node_embedding[:data.layer_ranges[0][1]])
         
