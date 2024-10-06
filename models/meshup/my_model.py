@@ -269,10 +269,10 @@ class UaMgnn(nn.Module):
                 print("Edge index", data.edge_index.shape) 
                 print("Nombre noeuds dans plus fin", pf_node_indices_range[1]-pf_node_indices_range[0], "range", pf_node_indices_range)
                 print("Nombre noeuds dans moins fin", mf_node_indices_range[1]-mf_node_indices_range[0], "range", mf_node_indices_range)
-                up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - pf_node_indices_range[0] - 1
+                up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - pf_node_indices_range[0]
                 print("up_scale_edge_index", up_scale_edge_index.shape, torch.min(up_scale_edge_index), torch.max(up_scale_edge_index)) 
                 print("nodes_embedding_up_sampling", nodes_embedding_up_sampling.shape)
-                node_embedding[pf_node_indices_range[0]:pf_node_indices_range[1]] = self.up_sampling_processors[r](nodes_embedding_up_sampling, up_scale_edge_index , up_scale_edge_embeddings)[:pf_node_indices_range[1]-pf_node_indices_range[0]]
+                node_embedding[pf_node_indices_range[0]:pf_node_indices_range[1]] = self.up_sampling_processors[r](nodes_embedding_up_sampling, up_scale_edge_index , up_scale_edge_embeddings)[:pf_node_indices_range[1]-pf_node_indices_range[0]] # Useless computation to fix
         
         return self.node_decoder(node_embedding[:data.layer_ranges[0][1]])
         
