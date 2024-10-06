@@ -255,52 +255,36 @@ class UaMgnn(nn.Module):
         for r in range(self.R): # the 𝑟-th mesh graph
             ir = self.R - r - 1 
             # We get the range of the edges in the layer r
-            #r_edge_range = data.layer_ranges[ir]
-            r_clusters_edge_indicies = data.clusters[ir*self.K:(ir+1)*self.K]
-            nodes_of_r = torch.cat(data.node_clusters[ir*self.K:(ir+1)*self.K])
-            new_node_embedding_r = []
-            for k in range(self.K): # the 𝑘-th subgraph
-                ik = self.K - k - 1
-                rk_cluster_edge_indices = r_clusters_edge_indicies[ik]
-                edges_attr_rk_cluster = edges_attr[rk_cluster_edge_indices]
+            r_node_indices_range = data.layer_ranges[ir]
+            nodes_embedding_r = node_embedding[r_node_indices_range[0]:r_node_indices_range[1]]
+            for k in range(self.K-1, -1, -1): # the 𝑘-th subgraph
+                edge_indices_of_k = data.clusters[ir*self.K + k]
+                edges_attr_rk_cluster = edges_attr[edge_indices_of_k]
                 # Initiate e_{i,j}^{r,k} by edge encoder; 
-                edge_embedding[rk_cluster_edge_indices] = self.subgraph_edge_encoders[ir][ik](edges_attr_rk_cluster)
+                edge_embedding[edge_indices_of_k] = self.subgraph_edge_encoders[ir][k](edges_attr_rk_cluster)
                 # v_{i}^{r,k,0} <- v_{i}^{r};
-                n_mp_lk = data.edge_frequencies[ir][ik] # the 𝑙-th MP step
+                n_mp_lk = data.edge_frequencies[ir][k] # the 𝑙-th MP step
+                 
+                nodes_of_k_in_r = data.node_clusters[ir*self.K + k] 
+                node_embeddings_rk = nodes_embedding_r[nodes_of_k_in_r]
                 
-                # Get the nodes indices of the subgraph indexed by the whole graph
-                nodes_of_rk = data.node_clusters[ir*self.K + ik] # (N_rk)
-                # Get the nodes embeddings of the subgraph from the whole list of nodes embeddings
-                node_embedding_rk = node_embedding[nodes_of_rk] # (N_rk, 128)
-                # Get the edge embeddings of the subgraph from the whole list of edge embeddings
-                edge_embedding_rk = edge_embedding[rk_cluster_edge_indices] # (E_rk, 128)
+                edge_index_rk_in_r = data.edge_index[:, edge_indices_of_k] - r_node_indices_range[0]
+                mask = torch.full((nodes_embedding_r.shape[0],), 1, dtype=torch.int32)
+                mask[nodes_of_k_in_r] = 0
                 
-                # Get the edge index of the subgraph from the whole list of edge index
-                edge_index_rk = data.edge_index[:, rk_cluster_edge_indices] # (2, E_k) mais avec des indexs dans le graph complet
-                # Remove the minimum value from the edge index to have the correct index
-                edge_index_rk -= torch.min(edge_index_rk)
-                max_ = torch.max(edge_index_rk)
-                max_ = max_.cpu()
-                print(max_, flush=True)
-                mask = torch.full((torch.max(edge_index_rk)+1,), 1, dtype=torch.int32, device=edge_index_rk.device)
-                mask[nodes_of_rk-torch.min(nodes_of_r)] = 0    
-                cumsum = torch.cumsum(mask, dim=0)
-                edge_index_rk -= cumsum[edge_index_rk]-1 # TODO: fix -1 should not be here
-                
+                mask = torch.cumsum(mask, dim=0)
+
+                edge_index_of_k_in_k = edge_index_rk_in_r - mask[edge_index_rk_in_r]
+                edge_embedding_rk = edge_embedding[edge_indices_of_k]
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
-                    #node_embedding_rk = (node_embedding, edge_embedding[rk_cluster_edge_indices], data.edge_index[:, rk_cluster_edge_indices])
-                    print(node_embedding_rk.shape, edge_index_rk.shape, edge_embedding_rk.shape, flush=True)
-                    print(edge_index_rk.min(), edge_index_rk.max(), flush=True)
-                    plot_graph(Data(pos=data.pos[nodes_of_rk], edge_index=edge_index_rk), l, node_colors=node_embedding_rk[:, 0].detach().cpu().numpy())
-                    node_embedding_rk = self.processors[ir][ik](node_embedding_rk, edge_index_rk, edge_embedding_rk)
-                    print("one done")
-            new_node_embedding_r.append(node_embedding_rk)
+                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk)
+            #new_node_embedding_r.append(node_embedding_rk)
             # Aggregate the node node_embedding_r
-            if n_mp_lk > 0:
-                new_node_embedding_r = torch.stack(new_node_embedding_r)
-                print(node_embedding.shape)
-                node_embedding[nodes_of_r] = torch.mean(new_node_embedding_r, dim=0)
-            print("one k done")
+            #if n_mp_lk > 0:
+            #    new_node_embedding_r = torch.stack(new_node_embedding_r)
+            #    print(node_embedding.shape)
+            #    node_embedding[nodes_of_r] = torch.mean(new_node_embedding_r, dim=0)
+            print("one R done")
         return self.node_decoder(node_embedding)
         
