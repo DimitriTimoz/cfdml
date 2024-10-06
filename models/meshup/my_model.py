@@ -24,7 +24,7 @@ from torch_geometric.utils import add_self_loops
 # Pour chaque node on décode une représentation du node à partir de ses features et des features des edges dans un espace de la taille des features à prédire
 #
 
-REDUCE_F = 4
+REDUCE_F = 8
 
 class EdgeEncoder(nn.Module):
     def __init__(self, in_dim, out_dim, device = 'cpu'):

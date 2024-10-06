@@ -9,17 +9,13 @@
 import torch
 from utils import DelaunayTransform
 from torch_geometric.data import Data
-import pyvista as pv
 import numpy as np
-import matplotlib.pyplot as plt
-torch.__version__, pv.__version__
 
 # %%
 N = 1000
 pos = torch.rand((N, 2))
 data = Data(pos=pos, surf=torch.full((N, 1), False))
 transform = DelaunayTransform()
-print(data.pos.shape)
 data = transform(data)
 data.pos = pos
 
@@ -27,38 +23,6 @@ data = torch.load('./sampleData.pth')
 data.edge_index = np.empty((2, 0))
 transform = DelaunayTransform()
 data = transform(data)
-def plot_graph(data, l=1, plotter=None, node_colors=None):
-    
-    c = ['r', 'g', 'b', 'm']
-    
-    p = pv.Plotter() if plotter is None else plotter
-    
-    # Création d'un PolyData pour les points (nœuds)
-    mesh = pv.PolyData()
-    
-    # Gestion des dimensions des positions
-    if data.pos.shape[1] != 3:
-        # Ajouter une troisième dimension si nécessaire
-        mesh.points = np.concatenate([data.pos.cpu().numpy(), np.full((data.pos.shape[0], 1), l)], axis=1)
-    else:
-        mesh.points = data.pos.cpu().numpy()
-
-    # Création des lignes pour les arêtes
-    edges = data.edge_index.t().cpu().numpy()
-    lines = np.hstack([np.full((edges.shape[0], 1), 2), edges]).ravel()
-    mesh.lines = lines
-    
-    
-    # Ajout des couleurs au PolyData
-    mesh.point_data['values'] = node_colors if node_colors is not None else np.random.randint(0, 255, size=(data.pos.shape[0], 3))
-    
-    # Ajouter le mesh avec les couleurs des nœuds
-    p.add_mesh(mesh, scalars='values', line_width=0.5, point_size=0.3, render_points_as_spheres=True)
-
-    # Si aucun plotter n'a été fourni, on montre la figure
-    if plotter is None:
-        p.show()
-
 # %%
 #plot_graph(data)
 device = torch.device('cuda')
@@ -125,21 +89,6 @@ clusters, nodes, centroids, angles = divide_mesh(data.pos, data.edge_index.T, 6,
 for c in clusters:
     print(torch.min(c))
 #print(angles)
-#col = ['r', 'g', 'b', 'm', 'y', 'c']
-#plt.figure(figsize=(12, 12))
-#for c in range(centroids.shape[0]):
-#    plt.scatter(data.pos[nodes[c], 0].cpu().numpy(), data.pos[nodes[c], 1].cpu().numpy(), s=0.1)
-#    edges = clusters[c]
-#    edges = data.edge_index[:, edges]
-#    edge_pos = data.pos[edges]
-#
-#    for i in range(edge_pos.shape[1]):
-#        plt.plot(edge_pos[:, i, 0].cpu().numpy(), edge_pos[:, i, 1].cpu().numpy(), c=col[c], linewidth=0.5)
-#plt.show()
-#for c in range(centroids.shape[0]):
-#    plt.quiver(0, 0, centroids[c, 0].cpu().numpy(), centroids[c, 1].cpu().numpy(), scale=1, scale_units='xy', angles='xy', color=col[c], label=f"{angles[c].item():.2f}°")
-#plt.legend()
-print(clusters)
 
 # %%
 import torch
@@ -239,7 +188,7 @@ def generate_coarse_graphs(data, R: int, K: int, visualize=False):
 device = torch.device("cuda" if False else "cpu")
 b = generate_coarse_graphs(data.cpu(), 3, 5, visualize=True).to(device)
 #print("Final graph", b, flush=True)
-plot_graph(b)
+
 
 
 # %%
@@ -259,7 +208,7 @@ importlib.reload(my_model)
 # Reload the model
 model = my_model.UaMgnn(5, 4, R=3, K=5, device=device)
 print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
-model(b).shape
+print(model(b))
 
 # %%
 #color = torch.tensor([0.0], device=device)
@@ -269,26 +218,8 @@ model(b).shape
 #plot_graph(b, l=1, node_colors=colors.cpu().numpy())
 
 
-# %%
-edge_index = torch.IntTensor([
-    [0, 1, 2, 3],
-    [1, 2, 3, 4]
-])   
 
-node_index = torch.IntTensor([0, 1, 2, 3, 4])
-nodes_index_of_subgraph = torch.IntTensor([0, 1, 3, 4])
-edge_indices_of_subgraph = torch.IntTensor([0, 3])
 
-mask = torch.full((node_index.shape[0],), 1, dtype=torch.int32)
-mask[nodes_index_of_subgraph] = 0
-
-mask = torch.cumsum(mask, dim=0)
-edge_of_subgraph = edge_index[:, edge_indices_of_subgraph]
-for i in range(edge_of_subgraph.shape[0]):
-    edge_of_subgraph[i, 0] -= mask[edge_of_subgraph[i, 0]]
-    edge_of_subgraph[i, 1] -= mask[edge_of_subgraph[i, 1]]
-
-edge_of_subgraph
 
 # %% [markdown]
 # utiliser les mêmes offset que lors de l'initialisation pour obtenir les sous graphes
