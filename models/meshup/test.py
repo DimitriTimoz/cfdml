@@ -206,22 +206,9 @@ import my_model
 importlib.reload(my_model)
 
 # Reload the model
+import time
+start = time.time()
 model = my_model.UaMgnn(5, 4, R=3, K=5, device=device)
 print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
-print(model(b))
-
-# %%
-#color = torch.tensor([0.0], device=device)
-#colors = color.repeat(b.pos.shape[0], 1)
-#colors[torch.logical_not(b.surf)] = torch.tensor([1.0], device=device)
-#print(torch.mean(colors, dim=0), flush=True)
-#plot_graph(b, l=1, node_colors=colors.cpu().numpy())
-
-
-
-
-
-# %% [markdown]
-# utiliser les mêmes offset que lors de l'initialisation pour obtenir les sous graphes
-
-
+print(model(b).shape)
+print("Time: ", time.time()-start)
