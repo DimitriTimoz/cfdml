@@ -214,6 +214,9 @@ class UaMgnn(nn.Module):
         # Compute the default edge attributes TODO: post_processing
         edge_directions = data.pos[data.edge_index[1]][:, :2] - data.pos[data.edge_index[0]][:, :2]
         edge_norms = torch.norm(edge_directions, dim=1, keepdim=True)
+        print("edge_directions", torch.isnan(edge_directions).sum())
+        print("edge_norms", torch.isnan(edge_norms).sum())
+        print("edge_norms zero", (torch.logical_not(torch.is_nonzero(edge_norms))).sum())
         edge_directions = edge_directions / edge_norms
         edges_attr = torch.cat([edge_directions, edge_norms], dim=1)
 
