@@ -258,7 +258,6 @@ class UaMgnn(nn.Module):
                 # We initiate e_{i,j}^{r,r+1} by edge encoder;
                 up_scale_edge_range = data.up_scale_edge_ranges[ir-1]
                 up_scale_edge_attributes = edge_directions[up_scale_edge_range[0]:up_scale_edge_range[1]] 
-                print("edge_attr ", torch.isnan(up_scale_edge_attributes).sum())
                 up_scale_edge_embeddings = self.up_sampling_edge_encoder[r](up_scale_edge_attributes)
 
                 # Update v_[j]^{r+1} by up-sampling on e_{i,j}^{r,r+1} and v_{i}^{r}
@@ -267,12 +266,7 @@ class UaMgnn(nn.Module):
                 nodes_embedding_up_sampling = node_embedding[pf_node_indices_range[0]:mf_node_indices_range[1]]
                
                 up_scale_edge_index = data.edge_index[:, up_scale_edge_range[0]:up_scale_edge_range[1]] - pf_node_indices_range[0]
-                print("before up", torch.isnan(nodes_embedding_up_sampling).sum())
-                print("before up edge embeddings", torch.isnan(up_scale_edge_embeddings).sum())
                 mp_output = self.up_sampling_processors[r](nodes_embedding_up_sampling, up_scale_edge_index, up_scale_edge_embeddings)[:pf_node_indices_range[1]-pf_node_indices_range[0]] # Useless computation to fix
-                print("after up", torch.isnan(mp_output).sum())
                 node_embedding[pf_node_indices_range[0]:pf_node_indices_range[1]] = mp_output
-            print("At step r =", r, torch.isnan(node_embedding).sum())
-        print("before decoder", torch.isnan(node_embedding).sum())
         return self.node_decoder(node_embedding[:data.layer_ranges[0][1]])
         
