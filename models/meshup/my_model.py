@@ -200,7 +200,7 @@ class UaMgnn(nn.Module):
         self.node_decoder = Decoder(128, out_dim, device)
         self.processors = torch.nn.ModuleList([torch.nn.ModuleList([Processor(128, 128) for _ in range(K)]) for _ in range(R)]).to(device)
         self.up_sampling_processors = torch.nn.ModuleList([Processor(128, 128) for _ in range(R-1)]).to(device)
-        
+
     def forward(self, data: Data) -> Tensor:
         """Process the input graph
 
@@ -247,7 +247,7 @@ class UaMgnn(nn.Module):
                 edge_embedding_rk = edge_embedding[edge_indices_of_k]
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
-                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk.clone())
+                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk)
                 new_node_embedding_r[k][nodes_of_k_in_r] = node_embeddings_rk
             # Aggregate the node node_embedding_r
             if n_mp_lk > 0:

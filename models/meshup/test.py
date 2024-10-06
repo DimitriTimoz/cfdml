@@ -205,7 +205,7 @@ criterion = torch.nn.MSELoss()
 
 print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
 y = None
-with torch.autograd.profiler.profile(use_cuda=True) as prof:
+with torch.autograd.profiler.profile(use_cuda=True, record_shapes=True) as prof:
     y = model(b)
 print(prof.key_averages().table(sort_by="cuda_time_total"))
 print(torch.isnan(y).sum())
