@@ -214,8 +214,8 @@ class UaMgnn(nn.Module):
         # Compute the default edge attributes TODO: post_processing
         edge_directions = data.pos[data.edge_index[1]][:, :2] - data.pos[data.edge_index[0]][:, :2]
         edge_norms = torch.norm(edge_directions, dim=1, keepdim=True)
-        edge_directions = edge_directions / edge_norms
-        edges_attr = torch.cat([edge_directions, edge_norms], dim=1)
+        edge_norms[edge_norms == 0] = 1.0
+        edges_attr = torch.cat([edge_directions / edge_norms, edge_norms], dim=1)
 
         # Initiate {v^r}_i by node encoder for 1 ≤ 𝑟 ≤ 𝑅;
         node_embedding = self.node_encoder(data) # (N, 128)
