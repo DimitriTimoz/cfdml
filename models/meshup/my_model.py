@@ -226,7 +226,7 @@ class UaMgnn(nn.Module):
             # We get the range of the edges in the layer r
             r_node_indices_range = data.layer_ranges[ir]
             nodes_embedding_r = node_embedding[r_node_indices_range[0]:r_node_indices_range[1]]
-            new_node_embedding_r = [torch.empty((nodes_embedding_r.shape[0], 128), device=self.device) for _ in range(self.K)]
+            new_node_embedding_r = [torch.zeros((nodes_embedding_r.shape[0], 128), device=self.device) for _ in range(self.K)]
             for k in range(self.K): # the 𝑘-th subgraph
                 edge_indices_of_k = data.clusters[ir*self.K + k]
                 edges_attr_rk_cluster = edges_attr[edge_indices_of_k]
