@@ -1,5 +1,6 @@
 env/
 Dataset/
+DATA/
 *.zip
 __pycache__/
 target/
