@@ -62,7 +62,6 @@ class DelaunayTransform(BaseTransform):
 
         # Update the Data object
         data.edge_index = edge_index
-        data.edge_attr = np.zeros((edge_index.shape[1], 1))
         return data
 
 def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int, verbose=False):
