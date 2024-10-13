@@ -81,54 +81,6 @@ class Decoder(nn.Module):
         return self.model(node_embedding)
     
     
-#class Processor(nn.Module):
-#    def __init__(self, in_dim, out_dim, device):
-#        super().__init__()
-#        self.in_dim = in_dim
-#        self.device = device
-#        self.out_dim = out_dim
-#        self.edge_model = nn.Sequential(
-#            nn.Linear(128*3, 512),
-#            nn.ReLU(),
-#            nn.Linear(512, 128)
-#        ).to(device)    
-#        
-#        self.node_model = nn.Sequential(
-#            nn.Linear(128*2, 512),
-#            nn.ReLU(),
-#            nn.Linear(512, 128)
-#        ).to(device)
-#            
-#    
-#    def edge_processor(self, edge_embedding: Tensor, nodes_from_edge_embedding: Tensor) -> Tensor:
-#        """
-#        e_ij^{r,k,l+} = f_e(e_ij^{r,k,l}, v_i^{r,k,l}, v_j^{r,k,l})
-#        Args:
-#            edge_embedding (Tensor(N, 128)): Edge embeddings of the subgraph
-#            nodes_from_edge_embedding (Tensor(N, 128*2)): The nodes embeddings from the edge embeddings
-#
-#        Returns:
-#            Tensor(N, 128): The processed edge embeddings of the subgraph 
-#        """
-#        return self.edge_model(torch.cat((edge_embedding, nodes_from_edge_embedding), dim=1))
-#    
-#    def forward(self, node_embeddings: Tensor, edge_embeddings_sg: Tensor, edge_indices: Tensor, node_indices_sg: Tensor) -> Tensor:
-#        """Process the input graph
-#
-#        Args:
-#            node_embedding (Tensor(N, 128)): The node embeddings of whole graph
-#            edge_embeddings_sg (Tensor(N, 128)): The edge embeddings of the subgraph
-#            edge_indices (Tensor(N, 2)): The edge indices of the subgraph indexed by the whole graph
-#            node_indices_sg (Tensor(N)): The node indices of the subgraph indexed by the whole graph
-#
-#        Returns:
-#            Tensor: The processed node embeddings
-#        """
-#        edge_embedding = self.edge_processor(edge_embeddings_sg, node_embeddings[edge_indices].reshape(-1, 256))
-#        # Sum of the edge embeddings from the same node 
-#        return self.node_model(torch.stack((node_embeddings[node_indices_sg], edge_embedding[], ), dim=1))
-    
-
 class Processor(MessagePassing):
     def __init__(self, in_dim, out_dim):
         super().__init__(aggr='add')  # or 'add', 'max', etc.
@@ -219,6 +171,7 @@ class UaMgnn(nn.Module):
 
         # Initiate {v^r}_i by node encoder for 1 ≤ 𝑟 ≤ 𝑅;
         node_embedding = self.node_encoder(data) # (N, 128)
+        print(torch.sum(torch.isnan(node_embedding)))
         edge_embedding = torch.zeros((data.edge_index.shape[1], 128), device=self.device) # (E, 128)
         for r in range(self.R): # the 𝑟-th mesh graph
             ir = self.R - r - 1 
