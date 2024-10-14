@@ -201,10 +201,11 @@ class UaMgnn(nn.Module):
 
                 edge_index_of_k_in_k = edge_index_rk_in_r - mask[edge_index_rk_in_r]
                 edge_embedding_rk = edge_embedding[edge_indices_of_k]
+                processor = self.processors[ir][k]
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
                     node_embeddings_rk = checkpoint.checkpoint(
-                        self.processor[ir][k],
+                        processor,
                         node_embeddings_rk,
                         edge_index_of_k_in_k,
                         edge_embedding_rk
