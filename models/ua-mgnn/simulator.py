@@ -98,17 +98,16 @@ class AugmentedSimulator():
         predictions=[]
         with torch.no_grad():
             for data in test_dataset:        
-                data_clone = data.clone()
-                data_clone = data_clone.to(self.device)
-                out = self.model(data_clone)
+                data = data.to(self.device)
+                out = self.model(data)
 
-                targets = data_clone.y
+                targets = data.y
                 loss_criterion = nn.MSELoss(reduction = 'none')
 
                 loss_per_var = loss_criterion(out, targets).mean(dim = 0)
                 loss = loss_per_var.mean()
-                loss_surf_var = loss_criterion(out[data_clone.surf, :], targets[data_clone.surf, :]).mean(dim = 0)
-                loss_vol_var = loss_criterion(out[~data_clone.surf, :], targets[~data_clone.surf, :]).mean(dim = 0)
+                loss_surf_var = loss_criterion(out[data.surf, :], targets[data.surf, :]).mean(dim = 0)
+                loss_vol_var = loss_criterion(out[~data.surf, :], targets[~data.surf, :]).mean(dim = 0)
                 loss_surf = loss_surf_var.mean()
                 loss_vol = loss_vol_var.mean()  
 

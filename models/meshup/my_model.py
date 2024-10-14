@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import  MessagePassing
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Data
 from torch import Tensor
-from torch_geometric.utils import add_self_loops
+import torch.utils.checkpoint as checkpoint
 
 # 
 # ENCODER ::::
@@ -34,12 +34,12 @@ class EdgeEncoder(nn.Module):
         self.out_dim = out_dim
         self.model = nn.Sequential(
             nn.Linear(in_dim, 128//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
-    def forward(self, data: Data) -> Tensor:
-        return self.model(data)
+    def forward(self, x: Tensor) -> Tensor:
+        return self.model(x)
     
 class NodeEncoder(nn.Module):
     def __init__(self, in_dim, out_dim, device = 'cpu'):
@@ -49,12 +49,12 @@ class NodeEncoder(nn.Module):
         self.out_dim = out_dim
         self.model = nn.Sequential(
             nn.Linear(in_dim, 128//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
-    def forward(self, data: Data) -> Tensor:
-        return self.model(data.x)
+    def forward(self, x: Tensor) -> Tensor:
+        return self.model(x)
 
 class Decoder(nn.Module):
     def __init__(self, in_dim, out_dim, device):
@@ -64,7 +64,7 @@ class Decoder(nn.Module):
         self.out_dim = out_dim
         self.model = nn.Sequential(
             nn.Linear(in_dim, 128//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
@@ -81,65 +81,17 @@ class Decoder(nn.Module):
         return self.model(node_embedding)
     
     
-#class Processor(nn.Module):
-#    def __init__(self, in_dim, out_dim, device):
-#        super().__init__()
-#        self.in_dim = in_dim
-#        self.device = device
-#        self.out_dim = out_dim
-#        self.edge_model = nn.Sequential(
-#            nn.Linear(128*3, 512),
-#            nn.ReLU(),
-#            nn.Linear(512, 128)
-#        ).to(device)    
-#        
-#        self.node_model = nn.Sequential(
-#            nn.Linear(128*2, 512),
-#            nn.ReLU(),
-#            nn.Linear(512, 128)
-#        ).to(device)
-#            
-#    
-#    def edge_processor(self, edge_embedding: Tensor, nodes_from_edge_embedding: Tensor) -> Tensor:
-#        """
-#        e_ij^{r,k,l+} = f_e(e_ij^{r,k,l}, v_i^{r,k,l}, v_j^{r,k,l})
-#        Args:
-#            edge_embedding (Tensor(N, 128)): Edge embeddings of the subgraph
-#            nodes_from_edge_embedding (Tensor(N, 128*2)): The nodes embeddings from the edge embeddings
-#
-#        Returns:
-#            Tensor(N, 128): The processed edge embeddings of the subgraph 
-#        """
-#        return self.edge_model(torch.cat((edge_embedding, nodes_from_edge_embedding), dim=1))
-#    
-#    def forward(self, node_embeddings: Tensor, edge_embeddings_sg: Tensor, edge_indices: Tensor, node_indices_sg: Tensor) -> Tensor:
-#        """Process the input graph
-#
-#        Args:
-#            node_embedding (Tensor(N, 128)): The node embeddings of whole graph
-#            edge_embeddings_sg (Tensor(N, 128)): The edge embeddings of the subgraph
-#            edge_indices (Tensor(N, 2)): The edge indices of the subgraph indexed by the whole graph
-#            node_indices_sg (Tensor(N)): The node indices of the subgraph indexed by the whole graph
-#
-#        Returns:
-#            Tensor: The processed node embeddings
-#        """
-#        edge_embedding = self.edge_processor(edge_embeddings_sg, node_embeddings[edge_indices].reshape(-1, 256))
-#        # Sum of the edge embeddings from the same node 
-#        return self.node_model(torch.stack((node_embeddings[node_indices_sg], edge_embedding[], ), dim=1))
-    
-
 class Processor(MessagePassing):
     def __init__(self, in_dim, out_dim):
         super().__init__(aggr='add')  # or 'add', 'max', etc.
         self.edge_mlp = nn.Sequential(
             nn.Linear((2 * in_dim) + out_dim, 512//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(512//REDUCE_F, out_dim)
         )
         self.node_mlp = nn.Sequential(
             nn.Linear(in_dim + out_dim, 512//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(512//REDUCE_F, out_dim)
         )
 
@@ -210,15 +162,19 @@ class UaMgnn(nn.Module):
         Returns:
             Tensor: The output features
         """
-        
+        epsilon = 1e-8
+
         # Compute the default edge attributes TODO: post_processing
         edge_directions = data.pos[data.edge_index[1]][:, :2] - data.pos[data.edge_index[0]][:, :2]
-        edge_norms = torch.norm(edge_directions, dim=1, keepdim=True)
+        edge_norms = torch.norm(edge_directions, dim=1, keepdim=True) + epsilon
         edge_norms[edge_norms == 0] = 1.0
         edges_attr = torch.cat([edge_directions / edge_norms, edge_norms], dim=1)
 
         # Initiate {v^r}_i by node encoder for 1 ≤ 𝑟 ≤ 𝑅;
-        node_embedding = self.node_encoder(data) # (N, 128)
+        node_embedding = checkpoint.checkpoint(self.node_encoder, data.x) # (N, 128)
+        if torch.isnan(node_embedding).any():
+            a = self.node_decoder.model.parameters()
+            print("Nan node embedding in node encoder")
         edge_embedding = torch.zeros((data.edge_index.shape[1], 128), device=self.device) # (E, 128)
         for r in range(self.R): # the 𝑟-th mesh graph
             ir = self.R - r - 1 
@@ -247,7 +203,12 @@ class UaMgnn(nn.Module):
                 edge_embedding_rk = edge_embedding[edge_indices_of_k]
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
-                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk)
+                    node_embeddings_rk = checkpoint.checkpoint(
+                        self.processor[ir][k],
+                        node_embeddings_rk,
+                        edge_index_of_k_in_k,
+                        edge_embedding_rk
+                    )
                 new_node_embedding_r[k][nodes_of_k_in_r] = node_embeddings_rk
             # Aggregate the node node_embedding_r
             if n_mp_lk > 0:

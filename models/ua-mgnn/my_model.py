@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch_geometric.nn import  MessagePassing
 from torch_geometric.data import Data
 from torch import Tensor
+import torch.utils.checkpoint as checkpoint
 
 # 
 # ENCODER ::::
@@ -170,7 +171,7 @@ class UaMgnn(nn.Module):
         edges_attr = torch.cat([edge_directions / edge_norms, edge_norms], dim=1)
 
         # Initiate {v^r}_i by node encoder for 1 ≤ 𝑟 ≤ 𝑅;
-        node_embedding = self.node_encoder(data.x) # (N, 128)
+        node_embedding = checkpoint.checkpoint(self.node_encoder, data.x) # (N, 128)
         if torch.isnan(node_embedding).any():
             a = self.node_decoder.model.parameters()
             print("Nan node embedding in node encoder")
@@ -202,7 +203,12 @@ class UaMgnn(nn.Module):
                 edge_embedding_rk = edge_embedding[edge_indices_of_k]
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
-                    node_embeddings_rk = self.processors[ir][k](node_embeddings_rk, edge_index_of_k_in_k, edge_embedding_rk)
+                    node_embeddings_rk = checkpoint.checkpoint(
+                        self.processor[ir][k],
+                        node_embeddings_rk,
+                        edge_index_of_k_in_k,
+                        edge_embedding_rk
+                    )
                 new_node_embedding_r[k][nodes_of_k_in_r] = node_embeddings_rk
             # Aggregate the node node_embedding_r
             if n_mp_lk > 0:
