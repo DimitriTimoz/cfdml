@@ -34,12 +34,12 @@ class EdgeEncoder(nn.Module):
         self.out_dim = out_dim
         self.model = nn.Sequential(
             nn.Linear(in_dim, 128//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
-    def forward(self, data: Data) -> Tensor:
-        return self.model(data)
+    def forward(self, x: Tensor) -> Tensor:
+        return self.model(x)
     
 class NodeEncoder(nn.Module):
     def __init__(self, in_dim, out_dim, device = 'cpu'):
@@ -49,12 +49,12 @@ class NodeEncoder(nn.Module):
         self.out_dim = out_dim
         self.model = nn.Sequential(
             nn.Linear(in_dim, 128//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
-    def forward(self, data: Data) -> Tensor:
-        return self.model(data.x)
+    def forward(self, x: Tensor) -> Tensor:
+        return self.model(x)
 
 class Decoder(nn.Module):
     def __init__(self, in_dim, out_dim, device):
@@ -64,7 +64,7 @@ class Decoder(nn.Module):
         self.out_dim = out_dim
         self.model = nn.Sequential(
             nn.Linear(in_dim, 128//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(128//REDUCE_F, out_dim)
         ).to(device)
         
@@ -86,12 +86,12 @@ class Processor(MessagePassing):
         super().__init__(aggr='add')  # or 'add', 'max', etc.
         self.edge_mlp = nn.Sequential(
             nn.Linear((2 * in_dim) + out_dim, 512//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(512//REDUCE_F, out_dim)
         )
         self.node_mlp = nn.Sequential(
             nn.Linear(in_dim + out_dim, 512//REDUCE_F),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(512//REDUCE_F, out_dim)
         )
 
@@ -162,16 +162,19 @@ class UaMgnn(nn.Module):
         Returns:
             Tensor: The output features
         """
-        
+        epsilon = 1e-8
+
         # Compute the default edge attributes TODO: post_processing
         edge_directions = data.pos[data.edge_index[1]][:, :2] - data.pos[data.edge_index[0]][:, :2]
-        edge_norms = torch.norm(edge_directions, dim=1, keepdim=True)
+        edge_norms = torch.norm(edge_directions, dim=1, keepdim=True) + epsilon
         edge_norms[edge_norms == 0] = 1.0
         edges_attr = torch.cat([edge_directions / edge_norms, edge_norms], dim=1)
 
         # Initiate {v^r}_i by node encoder for 1 ≤ 𝑟 ≤ 𝑅;
-        node_embedding = self.node_encoder(data) # (N, 128)
-        print(torch.sum(torch.isnan(node_embedding)))
+        node_embedding = self.node_encoder(data.x) # (N, 128)
+        if torch.isnan(node_embedding).any():
+            a = self.node_decoder.model.parameters()
+            print("Nan node embedding in node encoder")
         edge_embedding = torch.zeros((data.edge_index.shape[1], 128), device=self.device) # (E, 128)
         for r in range(self.R): # the 𝑟-th mesh graph
             ir = self.R - r - 1 
