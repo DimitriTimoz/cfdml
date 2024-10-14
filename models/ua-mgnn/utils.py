@@ -1,6 +1,6 @@
 import torch
 from torch_cluster import grid_cluster
-from torch_scatter import scatter
+from torch_scatter import scatter, scatter_mean
 import numpy as np
 
 from scipy.spatial import Delaunay
@@ -59,53 +59,51 @@ class DelaunayTransform(BaseTransform):
         data.edge_index = edge_index.t()
         return data
 
+
 def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int, verbose=False):
     """Divide a mesh into k clusters of edges according to their direction.
 
     Args:
         v (Tensor(N, 2)): Positions of the vertices in the mesh.
-        e (Tensor(2, N)): Edge indices of the mesh.
+        e (Tensor(N, 2)): Edge indices of the mesh.
         k (int): Number of clusters to divide the mesh into.
 
     Returns:
-        
+        clusters_edge_indices, nodes
     """
-    clusters = [set() for _ in range(k)]
-    
-    # Randomly initialize centroids (2D points)
-    centroids = torch.randn(k, 2, device=v.device)
+    # Initialize centroids as unit vectors in different directions
+    angles = torch.linspace(0, 2 * np.pi, k, device=v.device)
+    centroids = torch.stack((torch.cos(angles), torch.sin(angles)), dim=1)  # Shape: (k, 2)
 
-    # Precompute edge directions and norms
+    # Compute edge directions and normalize
     edges_directions = v[e[:, 1]] - v[e[:, 0]]
-    edges_norms = torch.norm(edges_directions, dim=1, keepdim=True)  # Shape: [num_edges, 1]
-    edges_directions /= edges_norms  # Normalize edge directions
+    edges_directions = edges_directions / edges_directions.norm(dim=1, keepdim=True)
+
     norm_changes = float('inf')
     while norm_changes > 1e-3:
-        # Vectorized clustering step
-        centroids_norms = torch.norm(centroids, dim=1, keepdim=True)  # Shape: [num_centroids, 1]
-        cosine_angles = torch.matmul(edges_directions, centroids.T) / (centroids_norms.T)  # Shape: [num_edges, num_centroids]
-        # We use directly the cosine because they have opposite variations
-        max_edge_idxs = torch.argmax(cosine_angles, dim=1)  # Shape: [num_edges]
-        # Efficient assignment to clusters using torch
-        cluster_masks = [(max_edge_idxs == i) for i in range(k)]
-        for i in range(k):
-            clusters[i] = set((torch.nonzero(cluster_masks[i]).squeeze(1).tolist()))
+        # Compute cosine similarity between edge directions and centroids
+        cosine_sim = torch.matmul(edges_directions, centroids.T)
 
-        # Efficient centroid update
-        n_m = 0.0
-        for i in range(k):
-            if clusters[i]:  # Check if the cluster has assigned edges
-                cluster_edges = edges_directions[torch.tensor(list(clusters[i]), device=v.device)]
-                last_centroid = centroids[i].clone()
-                centroids[i] = torch.mean(cluster_edges, dim=0)
-                n_m = max(torch.norm(centroids[i] - last_centroid), n_m)
-        norm_changes = n_m
+        # Assign edges to the centroid with the highest cosine similarity
+        max_edge_idxs = torch.argmax(cosine_sim, dim=1)
 
-    # Post-process clusters to finalize edge indices
-    clusters_edge_indices = [torch.tensor(list(cluster), device=v.device) for cluster in clusters]
-    nodes = [torch.unique(e[cluster].view(-1)) for cluster in clusters_edge_indices]
+        # Update centroids
+        centroids_old = centroids.clone()
+        centroids = scatter_mean(edges_directions, max_edge_idxs, dim=0, dim_size=k)
+        # Handle clusters with no edges assigned
+        zero_norms = centroids.norm(dim=1) == 0
+        centroids[~zero_norms] = centroids[~zero_norms] / centroids[~zero_norms].norm(dim=1, keepdim=True)
+        centroids[zero_norms] = centroids_old[zero_norms]
+
+        # Compute maximum change in centroids
+        norm_changes = torch.max((centroids - centroids_old).norm(dim=1))
+
+    # Collect clusters
+    clusters_edge_indices = [torch.where(max_edge_idxs == i)[0] for i in range(k)]
+    nodes = [torch.unique(e[clusters_edge_indices[i]].view(-1)) for i in range(k)]
+
     if verbose:
-        angles = torch.rad2deg(torch.atan(centroids[:, 1] / centroids[:, 0]))
+        angles = torch.rad2deg(torch.atan2(centroids[:, 1], centroids[:, 0]))
         return clusters_edge_indices, nodes, centroids, angles
     else:
         return clusters_edge_indices, nodes
