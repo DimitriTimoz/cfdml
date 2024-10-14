@@ -1,9 +1,6 @@
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data
-
 import torch
-from torch_cluster import grid_cluster
-from torch_scatter import scatter
 import numpy as np
 from scipy.spatial import Delaunay
 
@@ -26,44 +23,38 @@ class DelaunayTransform(BaseTransform):
 
         Returns:
             Data: Updated Data object with 'edge_index' constructed via Delaunay triangulation.
-        """            
-        
-        # Convert node features to NumPy array
+        """
+        # Convert node features to NumPy arrays
         points = data.pos.cpu().numpy()
+        surf = data.surf.cpu().numpy()
 
         # Perform Delaunay triangulation
         tri = Delaunay(points)
-        # Extract edges from the simplices
-        edges = set()
-        for i, simplex in enumerate(tri.simplices):
-            # Each simplex is a triangle represented by three vertex indices    
-            allOnSurf = True
-            for i in range(3):
-                if not data.surf[simplex[i]]:
-                    allOnSurf = False
-                    break
-            if not allOnSurf:
-                edges.add(tuple(sorted([simplex[0], simplex[1]])))
-                edges.add(tuple(sorted([simplex[1], simplex[0]])))
-                edges.add(tuple(sorted([simplex[0], simplex[2]])))
-                edges.add(tuple(sorted([simplex[2], simplex[0]])))
-                edges.add(tuple(sorted([simplex[1], simplex[2]])))
-                edges.add(tuple(sorted([simplex[2], simplex[1]])))
-        # Convert set of edges to a list
-        edge_index = np.array(list(edges)).T  # Shape: (2, num_edges)
 
-        # Convert edge_index to torch tensor
+        # Check if all nodes in simplex are on the surface
+        simplices_surf = surf[tri.simplices]
+        all_on_surf = simplices_surf.all(axis=1)
+        simplices_to_use = ~all_on_surf
+        valid_simplices = tri.simplices[simplices_to_use]
+
+        # Extract edges from valid simplices
+        edges = np.concatenate([
+            valid_simplices[:, [0, 1]],
+            valid_simplices[:, [1, 2]],
+            valid_simplices[:, [2, 0]],
+            valid_simplices[:, [1, 0]],
+            valid_simplices[:, [2, 1]],
+            valid_simplices[:, [0, 2]]
+        ], axis=0)
+
+        edge_index = np.unique(edges, axis=0)
+
         edge_index = torch.tensor(edge_index, dtype=torch.long, device=data.pos.device)
-
-        # Optionally, you can compute edge attributes here (e.g., Euclidean distances)
-        # For example:
-        # edge_attr = torch.norm(data.x[edge_index[0]] - data.x[edge_index[1]], dim=1, keepdim=True)
-        # data.edge_attr = edge_attr
 
         # Update the Data object
         data.edge_index = edge_index
-        data.edge_attr = np.zeros((edge_index.shape[1], 1))
         return data
+
 
 def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int, verbose=False):
     """Divide a mesh into k clusters of edges according to their direction.
