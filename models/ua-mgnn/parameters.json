@@ -12,7 +12,7 @@
     "R": 3,
     "K": 6,
     "batch_size": 1,
-    "nb_epochs": 300,
+    "nb_epochs": 150,
     "lr": 0.0002
   },
   "training_config": {}
