@@ -1,13 +1,22 @@
 # %%
-import tensorflow as tf
-import os
-import json
-import functools
-import pyvista as pv
-import numpy as np
-from utils import *
+#!pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+#!pip install torch_geometric
+#!pip install pyvista
+#%pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-2.0.1+cpu.html
+#%pip install pyvista==0.44.1
 
 # %%
+import torch
+from torch_geometric.data import Data
+import pyvista as pv
+from utils import *
+torch.__version__, pv.__version__
+
+# %%
+data = torch.load('./sampleData.pth')
+data.edge_index = np.empty((2, 0))
+transform = DelaunayTransform()
+data = transform(data)
 def plot_graph(data, l=1, plotter=None, node_colors=None):
     
     c = ['r', 'g', 'b', 'm']
@@ -39,75 +48,66 @@ def plot_graph(data, l=1, plotter=None, node_colors=None):
     # Si aucun plotter n'a été fourni, on montre la figure
     if plotter is None:
         p.show()
+        
+data.edge_index.shape
 
 # %%
-def _parse(proto, meta):
-  """Parses a trajectory from tf.Example."""
-  feature_lists = {k: tf.io.VarLenFeature(tf.string)
-                   for k in meta['field_names']}
-  features = tf.io.parse_single_example(proto, feature_lists)
-  out = {}
-  for key, field in meta['features'].items():
-    data = tf.io.decode_raw(features[key].values, getattr(tf, field['dtype']))
-    data = tf.reshape(data, field['shape'])
-    if field['type'] == 'static':
-      data = tf.tile(data, [meta['trajectory_length'], 1, 1])
-    elif field['type'] == 'dynamic_varlen':
-      length = tf.io.decode_raw(features['length_'+key].values, tf.int32)
-      length = tf.reshape(length, [-1])
-      data = tf.RaggedTensor.from_row_lengths(data, row_lengths=length)
-    elif field['type'] != 'dynamic':
-      raise ValueError('invalid data format')
-    out[key] = data
-  return out
-
-def load_dataset(path, split):
-  """Load dataset."""
-  with open(os.path.join(path, 'meta.json'), 'r') as fp:
-    meta = json.loads(fp.read())
-  ds = tf.data.TFRecordDataset(os.path.join(path, split+'.tfrecord'))
-  ds = ds.map(functools.partial(_parse, meta=meta), num_parallel_calls=8)
-  ds = ds.prefetch(1)
-  return ds
+data
 
 # %%
-ds = load_dataset("../DATA/cylinder_flow", 'train')
+plot_graph(data)
 
 # %%
-from torch_geometric.data import Data
-import torch
-from utils import  DelaunayTransform
-from torch_geometric.loader import DataLoader
 
 
-# %%
-transform = DelaunayTransform()
-dataset = []
-for i, obs in enumerate(ds):
-    new_obs = {}
-    for key, value in obs.items():
-        if 'mesh' in key or 'cells' in key or 'node_type' in key:
-            key = key.replace('mesh_', '')
-            new_obs[key] = torch.Tensor(value[0].numpy())
-        else:
-            new_obs["x_" + key] = torch.Tensor(value[0].numpy())
-            new_obs["y_" + key] = torch.Tensor(value[-1].numpy())
-    surf = torch.Tensor((obs['velocity'][0][:] == 0.0).numpy())
-    surf = torch.logical_and(surf[:, 0], surf[:, 1])
-    x = torch.cat([new_obs['x_velocity'], new_obs['x_pressure']], dim=1)
-    y = torch.cat([new_obs['y_velocity'], new_obs['y_pressure']], dim=1)
-    data = transform(Data(pos=new_obs["pos"], surf=surf, x=x, y=y))
-    dataset.append(data)
-data_loader = DataLoader(dataset=dataset, batch_size=1)
-del dataset
+device = torch.device('cuda')
+b = generate_coarse_graphs(data, R=3, K=6)
+#plot_graph(b)
 
 # %%
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+b = b.to(device)
+b.layer_ranges
+
+# %%
+#%%timeit
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
 import importlib
-import utils
-importlib.reload(utils)
-from utils import *
+import my_model
+importlib.reload(my_model)
+
+# Reload the model
+model = my_model.UaMgnn(5, 4, R=3, K=5, device=device)
+print("N nodes: ", b.pos.shape[0], "N edges: ", b.edge_index.shape[1])
+model(b).shape
 
 # %%
-plot_graph(generate_coarse_graphs(next(iter(data_loader)), R=3, K=6, visualize=True))
+#color = torch.tensor([0.0], device=device)
+#colors = color.repeat(b.pos.shape[0], 1)
+#colors[torch.logical_not(b.surf)] = torch.tensor([1.0], device=device)
+#print(torch.mean(colors, dim=0), flush=True)
+#plot_graph(b, l=1, node_colors=colors.cpu().numpy())
+
+
+# %%
+edge_index = torch.IntTensor([
+    [0, 1, 2, 3],
+    [1, 2, 3, 4]
+])   
+
+node_index = torch.IntTensor([0, 1, 2, 3, 4])
+nodes_index_of_subgraph = torch.IntTensor([0, 1, 3, 4])
+edge_indices_of_subgraph = torch.IntTensor([0, 3])
+
+mask = torch.full((node_index.shape[0],), 1, dtype=torch.int32)
+mask[nodes_index_of_subgraph] = 0
+
+mask = torch.cumsum(mask, dim=0)
+edge_of_subgraph = edge_index[:, edge_indices_of_subgraph]
+edge_of_subgraph -= mask[edge_of_subgraph]
+
+edge_of_subgraph
 
 

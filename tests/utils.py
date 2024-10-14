@@ -52,10 +52,11 @@ class DelaunayTransform(BaseTransform):
 
         edge_index = np.unique(edges, axis=0)
 
+        # Convert edge_index to torch tensor
         edge_index = torch.tensor(edge_index, dtype=torch.long, device=data.pos.device)
 
         # Update the Data object
-        data.edge_index = edge_index
+        data.edge_index = edge_index.t()
         return data
 
 
@@ -73,10 +74,7 @@ def divide_mesh(v: torch.Tensor, e: torch.Tensor, k: int, verbose=False):
     clusters = [set() for _ in range(k)]
     
     # Randomly initialize centroids (2D points)
-    centroids = torch.deg2rad(torch.linspace(0, 360, k, device=v.device))
-    centroids = centroids.repeat(2, 1).T
-    centroids[0] = torch.sin(centroids[0])
-    centroids[1] = torch.cos(centroids[1])
+    centroids = torch.randn(k, 2, device=v.device)
 
     # Precompute edge directions and norms
     edges_directions = v[e[:, 1]] - v[e[:, 0]]
