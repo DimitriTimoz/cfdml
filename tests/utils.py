@@ -130,16 +130,16 @@ def generate_coarse_graph(data, r, clusters_per_layer):
     # Get the indices of the unique clusters
     _, new_index, counts = torch.unique(cluster, return_inverse=True, return_counts=True)
     # Gather each node to its cluster and compute the mean for position features
-    out_positions = scatter(data.pos.t(), new_index, reduce='mean')
+    out_positions = scatter(data.pos, new_index, dim=0, reduce='mean')
     
-    out_x = scatter(data.x.t(), new_index, reduce='mean')
+    out_x = scatter(data.x, new_index, dim=0, reduce='mean')
     
     # Interpolate the other features accordingly to the position    
     surf = scatter(data.surf.to(torch.int), new_index, reduce='max')
     connection_edge_index = torch.stack([new_index+data.pos.shape[0], torch.arange(0, new_index.shape[0], device=new_index.device)], dim=0)
     
     transform = DelaunayTransform()
-    data = transform(Data(pos=out_positions.t()[:, :2].to(data.pos.device), x=out_x.t().to(data.pos.device), surf=surf, device=data.pos.device))
+    data = transform(Data(pos=out_positions[:, :2].to(data.pos.device), x=out_x.to(data.pos.device), surf=surf, device=data.pos.device))
     new_clusters, new_cluster_nodes = divide_mesh(data.pos, data.edge_index.T, clusters_per_layer)
     s = torch.Tensor([c.shape[0] for c in new_clusters])
     
@@ -149,7 +149,7 @@ def generate_coarse_graph(data, r, clusters_per_layer):
     
 def generate_coarse_graphs(data, R: int, K: int, visualize=False):
     data = data.cpu() # Quicker to compute on CPU
-    range_ = 7500
+    range_ = 750
     edge_clusters, new_cluster_nodes = divide_mesh(data.pos, data.edge_index.T, K)
     data.clusters = edge_clusters
     data.node_clusters = new_cluster_nodes
