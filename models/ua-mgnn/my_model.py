@@ -204,7 +204,7 @@ class UaMgnn(nn.Module):
                 for l in range(n_mp_lk): # the 𝑙-th MP step
                     # Sep l of message passing between nodes and edges of the same k,𝑟-th mesh graph
                     node_embeddings_rk = checkpoint.checkpoint(
-                        self.processor[ir][k],
+                        self.processors[ir][k],
                         node_embeddings_rk,
                         edge_index_of_k_in_k,
                         edge_embedding_rk
