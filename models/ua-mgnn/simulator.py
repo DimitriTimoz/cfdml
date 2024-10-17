@@ -136,7 +136,7 @@ class AugmentedSimulator():
         return processed
 
 
-def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg = 1):
+def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg = 0.5):
     model = network.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr = hparams['lr'])
     lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
@@ -171,7 +171,7 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
 
     return model
 
-def train_model(device, model, train_loader, optimizer, scheduler, criterion = 'MSE', reg = 1):
+def train_model(device, model, train_loader, optimizer, scheduler, criterion = 'MSE', reg = 0.5):
     model.train()
     avg_loss_per_var = torch.zeros(4, device = device)
     avg_loss = 0
@@ -213,8 +213,11 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         avg_loss_surf += loss_surf
         avg_loss_vol += loss_vol 
         iterNum += 1
+        print('Loss per var: ', loss_per_var,'loss: ', total_loss, "loss_surf: ", loss_surf, "loss_vol: ", loss_vol)
+        if iterNum > 10:
+            break
 
-    print("Loss per var: ", avg_loss_per_var.cpu().data.numpy()/iterNum)
+    print("Loss per var: ", avg_loss_per_var.cpu().data.numpy()/iterNum, iterNum)
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
             avg_loss_surf.cpu().data.numpy()/iterNum, avg_loss_vol.cpu().data.numpy()/iterNum
             

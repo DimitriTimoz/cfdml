@@ -1,5 +1,5 @@
 import time
-overall_start = time.time()         # <== Mark starting time
+overall_start = time.time()      
 import os
 from sys import path
 import sys
@@ -408,9 +408,6 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
             simulator.summary()
         except:
             print("Could not count parameters")
-
-
-
 
     print()
     print("Starting evaluation...")
