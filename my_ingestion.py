@@ -442,10 +442,10 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
         os.makedirs(output_dir)
  
     json_metrics = json.dumps(simulator_metrics, indent=4)
-    scoring(json_metrics)
     # Writing to sample.json
     with open(os.path.join(output_dir, 'json_metrics.json'), "w") as outfile:
         outfile.write(json_metrics)
+    scoring(simulator_metrics)
 
     print("finished evaluation!\nEvaluation metrics:")
     print(json_metrics)
