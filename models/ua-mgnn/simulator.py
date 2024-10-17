@@ -213,9 +213,8 @@ def train_model(device, model, train_loader, optimizer, scheduler, criterion = '
         avg_loss_surf += loss_surf
         avg_loss_vol += loss_vol 
         iterNum += 1
-        print('Loss per var: ', loss_per_var,'loss: ', total_loss, "loss_surf: ", loss_surf, "loss_vol: ", loss_vol)
-        if iterNum > 10:
-            break
+        if iterNum % 50 == 0:
+            print('Loss per var: ', loss_per_var,'loss: ', total_loss, "loss_surf: ", loss_surf, "loss_vol: ", loss_vol)
 
     print("Loss per var: ", avg_loss_per_var.cpu().data.numpy()/iterNum, iterNum)
     return avg_loss.cpu().data.numpy()/iterNum, avg_loss_per_var.cpu().data.numpy()/iterNum, avg_loss_surf_var.cpu().data.numpy()/iterNum, avg_loss_vol_var.cpu().data.numpy()/iterNum, \
