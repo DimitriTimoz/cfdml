@@ -148,7 +148,7 @@ def generate_coarse_graph(data, r, clusters_per_layer):
     return data, connection_edge_index, new_clusters, m, new_cluster_nodes
     
     
-def generate_coarse_graphs(data, R: int, K: int, factor=7, range_=5000, visualize=False):
+def generate_coarse_graphs(data, R: int, K: int, factor=7, range_=5000, mp=9, visualize=False):
     data = data.cpu() # Quicker to compute on CPU
     edge_clusters, new_cluster_nodes = divide_mesh(data.pos, data.edge_index.T, K)
     data.clusters = edge_clusters
@@ -193,6 +193,6 @@ def generate_coarse_graphs(data, R: int, K: int, factor=7, range_=5000, visualiz
         base.up_scale_edge_ranges[i-2] = torch.tensor([base.edge_index.shape[1]-connection_index.shape[1], base.edge_index.shape[1]], device=base.pos.device)
         base.layer_ranges[i-1] = torch.tensor([base.pos.shape[0]-subgraph.pos.shape[0]-1, base.pos.shape[0]], device=base.pos.device)
         if i >= R:
-            last_one_frequencies = torch.full((K,), 9, device=base.pos.device, dtype=torch.int) 
+            last_one_frequencies = torch.full((K,), mp, device=base.pos.device, dtype=torch.int) 
             base.edge_frequencies.append(last_one_frequencies)
     return base

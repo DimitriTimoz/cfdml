@@ -69,7 +69,7 @@ class AugmentedSimulator():
                             x=simulation_features, 
                             y=simulation_labels,
                             surf = simulation_surface.bool())) 
-            sampleData = generate_coarse_graphs(sampleData, self.hparams["R"], self.hparams["K"], factor=self.hparams["factor"], range_=self.hparams["range"])
+            sampleData = generate_coarse_graphs(sampleData, self.hparams["R"], self.hparams["K"], factor=self.hparams["factor"], range_=self.hparams["range"], mp=self.hparams["mp_l"])
             torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
         
