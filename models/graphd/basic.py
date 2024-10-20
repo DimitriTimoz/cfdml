@@ -40,7 +40,7 @@ class GraphD(torch.nn.Module):
         x = self.transformers[-1](x, edge_index)
         x = self.sage(x, edge_index)
         x = F.elu(x)
-        return x # TODO: choose activation function according to the variable
+        return x
             
 class BasicSimulator(nn.Module):
     def __init__(self, benchmark, **kwargs):

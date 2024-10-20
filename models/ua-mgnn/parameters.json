@@ -11,8 +11,10 @@
   "simulator_extra_parameters": {
     "R": 3,
     "K": 6,
+    "factor": 7,
+    "range": 5000,
     "batch_size": 1,
-    "nb_epochs": 225,
+    "nb_epochs": 150,
     "lr": 0.0002
   },
   "training_config": {}

@@ -147,9 +147,9 @@ def generate_coarse_graph(data, r, clusters_per_layer):
     m = torch.round(((torch.sum(counts)//(2*counts.shape[0]))*6)*(s/torch.sum(s))).int()
     return data, connection_edge_index, new_clusters, m, new_cluster_nodes
     
-def generate_coarse_graphs(data, R: int, K: int, visualize=False):
+    
+def generate_coarse_graphs(data, R: int, K: int, factor=7, range_=5000, visualize=False):
     data = data.cpu() # Quicker to compute on CPU
-    range_ = 7500
     edge_clusters, new_cluster_nodes = divide_mesh(data.pos, data.edge_index.T, K)
     data.clusters = edge_clusters
     data.node_clusters = new_cluster_nodes
@@ -164,7 +164,7 @@ def generate_coarse_graphs(data, R: int, K: int, visualize=False):
         base.pos = torch.concatenate([base.pos, torch.full((base.pos.shape[0], 1), 1, device=base.pos.device)], axis=1)
     s = [base.pos.shape[0]]
     for i in range(2, R+1):
-        subgraph, connection_index, new_clusters_edges, edge_frequencies, new_cluster_nodes = generate_coarse_graph(data, range_//(5**i), base.clusters_per_layer) # TODO: choose the right scale factor
+        subgraph, connection_index, new_clusters_edges, edge_frequencies, new_cluster_nodes = generate_coarse_graph(data, range_//(factor**i), base.clusters_per_layer) # TODO: choose the right scale factor
         base.edge_frequencies.append(edge_frequencies)
         # We add the new node clusters indexed in the subgraph
         base.node_clusters.extend(new_cluster_nodes)
@@ -193,7 +193,6 @@ def generate_coarse_graphs(data, R: int, K: int, visualize=False):
         base.up_scale_edge_ranges[i-2] = torch.tensor([base.edge_index.shape[1]-connection_index.shape[1], base.edge_index.shape[1]], device=base.pos.device)
         base.layer_ranges[i-1] = torch.tensor([base.pos.shape[0]-subgraph.pos.shape[0]-1, base.pos.shape[0]], device=base.pos.device)
         if i >= R:
-            last_one_frequencies = torch.full((K,), 1, device=base.pos.device, dtype=torch.int) 
+            last_one_frequencies = torch.full((K,), 9, device=base.pos.device, dtype=torch.int) 
             base.edge_frequencies.append(last_one_frequencies)
-            # TODO
     return base

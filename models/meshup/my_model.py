@@ -164,7 +164,6 @@ class UaMgnn(nn.Module):
         """
         epsilon = 1e-8
 
-        # Compute the default edge attributes TODO: post_processing
         edge_directions = data.pos[data.edge_index[1]][:, :2] - data.pos[data.edge_index[0]][:, :2]
         edge_norms = torch.norm(edge_directions, dim=1, keepdim=True) + epsilon
         edge_norms[edge_norms == 0] = 1.0

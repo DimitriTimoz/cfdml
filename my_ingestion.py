@@ -433,6 +433,8 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
         "fc_metrics_test":fc_metrics_test,
         "fc_metrics_test_ood":fc_metrics_test_ood
     }
+    
+    save_example_simulation(simulator, benchmark)
 
     # save evaluation for scoring program
     if not os.path.exists(output_dir):
@@ -446,5 +448,4 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
 
     print("finished evaluation!\nEvaluation metrics:")
     print(json_metrics)
-    save_example_simulation(simulator, benchmark)
     return 0

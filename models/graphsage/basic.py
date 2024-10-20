@@ -90,7 +90,7 @@ class GraphSAGE(torch.nn.Module):
             x = F.dropout(x, p=self.dropout)
             
         x = self.convs[-1](x, edge_index)
-        return x # TODO: choose activation function according to the variable
+        return 
             
 
 class BasicSimulator(nn.Module):

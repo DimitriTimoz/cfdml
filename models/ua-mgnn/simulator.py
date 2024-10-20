@@ -1,6 +1,4 @@
-import os
 import time
-import random
 import datetime as dt
 
 from tqdm import tqdm
@@ -71,7 +69,7 @@ class AugmentedSimulator():
                             x=simulation_features, 
                             y=simulation_labels,
                             surf = simulation_surface.bool())) 
-            sampleData = generate_coarse_graphs(sampleData, self.hparams["R"], self.hparams["K"])
+            sampleData = generate_coarse_graphs(sampleData, self.hparams["R"], self.hparams["K"], factor=self.hparams["factor"], range_=self.hparams["range"])
             torchDataset.append(sampleData)
             start_index += nb_nodes_in_simulation
         
@@ -80,7 +78,7 @@ class AugmentedSimulator():
     def train(self,train_dataset, save_path=None):
         train_dataset = self.process_dataset(dataset=train_dataset,training=True)
         print("Start training")
-        model = global_train(self.device, train_dataset, self.model, self.hparams,criterion = 'MSE_weighted')
+        model = global_train(self.device, train_dataset, self.model, self.hparams, criterion = 'MSE')
         print("Training done")
 
     def predict(self,dataset,**kwargs):
