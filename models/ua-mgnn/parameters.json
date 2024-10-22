@@ -10,7 +10,7 @@
   },
   "simulator_extra_parameters": {
     "R": 3,
-    "K": 4,
+    "K": 6,
     "factor": 6,
     "range": 5000,
     "mp_l": 10,

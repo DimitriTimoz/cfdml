@@ -85,14 +85,14 @@ class Processor(MessagePassing):
     def __init__(self, in_dim, out_dim):
         super().__init__(aggr='mean')
         self.edge_mlp = nn.Sequential(
+            nn.LayerNorm((2 * in_dim) + out_dim),
             nn.Linear((2 * in_dim) + out_dim, 512//REDUCE_F),
-            nn.LayerNorm(512//REDUCE_F),
             nn.ELU(),
             nn.Linear(512//REDUCE_F, out_dim)
         )
         self.node_mlp = nn.Sequential(
+            nn.LayerNorm(in_dim + out_dim),
             nn.Linear(in_dim + out_dim, 512//REDUCE_F),
-            nn.LayerNorm(512//REDUCE_F),
             nn.ELU(),
             nn.Linear(512//REDUCE_F, out_dim)
         )
