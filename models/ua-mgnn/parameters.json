@@ -16,7 +16,7 @@
     "mp_l": 10,
     "batch_size": 1,
     "nb_epochs": 150,
-    "lr": 0.0002
+    "lr": 0.00025
   },
   "training_config": {}
 }
