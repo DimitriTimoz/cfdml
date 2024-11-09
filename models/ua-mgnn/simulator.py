@@ -164,6 +164,12 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
         loss_surf_var_list.append(loss_surf_var)
         loss_vol_var_list.append(loss_vol_var)
         print('Train loss: ', train_loss)
+        if epoch % 10 == 0:
+            try:
+                model.save_model('model_epoch_'+str(epoch))
+            except:
+                print('Error saving model')
+    print('Training time for epoch: ', time.time() - start)
     loss_surf_var_list = np.array(loss_surf_var_list)
     loss_vol_var_list = np.array(loss_vol_var_list)
 
