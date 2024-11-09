@@ -142,7 +142,6 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
             max_lr = hparams['lr'],
             total_steps = (len(train_dataset) // hparams['batch_size'] + 1) * hparams['nb_epochs'],
         )
-    start = time.time()
 
     train_loss_surf_list = []
     train_loss_vol_list = []
@@ -154,6 +153,7 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
 
     for epoch in pbar_train:
         epoch_nb += 1
+        start = time.time()
         print('Epoch: ', epoch_nb)        
         train_loss, _, loss_surf_var, loss_vol_var, loss_surf, loss_vol = train_model(device, model, train_dataset, optimizer, lr_scheduler, criterion, reg = reg)        
         if criterion == 'MSE_weighted':
@@ -169,7 +169,7 @@ def global_train(device, train_dataset, network, hparams, criterion = 'MSE', reg
                 model.save_model('model_epoch_'+str(epoch))
             except:
                 print('Error saving model')
-    print('Training time for epoch: ', time.time() - start)
+        print('Training time for epoch: ', time.time() - start)
     loss_surf_var_list = np.array(loss_surf_var_list)
     loss_vol_var_list = np.array(loss_vol_var_list)
 
