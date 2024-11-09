@@ -13,10 +13,10 @@
     "K": 6,
     "factor": 6,
     "range": 5000,
-    "mp_l": 10,
+    "mp_l": 6,
     "batch_size": 1,
     "nb_epochs": 150,
-    "lr": 0.00025
+    "lr": 0.00002
   },
   "training_config": {}
 }

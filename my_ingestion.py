@@ -133,7 +133,6 @@ class TimeoutException(Exception):
 
 
 def save_example_simulation(simulator, benchmark):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Saving a simulation example")
     dataset = benchmark._test_dataset
     predictions = simulator.predict(dataset)
@@ -141,19 +140,21 @@ def save_example_simulation(simulator, benchmark):
     print("Prediction: ", predictions)
     nb_nodes_in_simulations = dataset.get_simulations_sizes()
     
-    # Get first positions 
-    coord_x=dataset.data['x-position'][:nb_nodes_in_simulations[0]]
-    coord_y=dataset.data['y-position'][:nb_nodes_in_simulations[0]]
+    coord_x=dataset.data['x-position']
+    coord_y=dataset.data['y-position']
+    predictions["x-position"]=coord_x
+    predictions["y-position"]=coord_y
+    l = 0
 
-    for key in predictions.keys():
-        predictions[key] = predictions[key][:nb_nodes_in_simulations[0]]
-    
-    predictions['x-position'] = coord_x
-    predictions['y-position'] = coord_y
-    
-    pd.DataFrame(predictions).to_csv("./test.csv")
-
-    print("Example simulation saved")
+    for sim in range(len(nb_nodes_in_simulations)):
+        
+        # Get first positions 
+        # Check or create directory
+        if not os.path.exists(f"./test_smis"):
+            os.makedirs(f"./test_smis")
+        pd.DataFrame(predictions[l:nb_nodes_in_simulations[sim]]).to_csv(f"./test_smis/test_{sim}.csv")
+        l = nb_nodes_in_simulations[sim]
+        print("Example simulation saved", sim)
 
     
 def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
