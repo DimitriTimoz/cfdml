@@ -135,7 +135,6 @@ class TimeoutException(Exception):
 def save_example_simulation(simulator, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Saving a simulation example")
-    simulator.to(device)
     dataset = benchmark._test_dataset
     predictions = simulator.predict(dataset)
     print("Prediction type: ", type(predictions))
@@ -434,18 +433,36 @@ def run_model(src_dir, model_path, BENCHMARK_PATH, verbose=True):
         "fc_metrics_test_ood":fc_metrics_test_ood
     }
     
-    save_example_simulation(simulator, benchmark)
 
-    # save evaluation for scoring program
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
- 
-    json_metrics = json.dumps(simulator_metrics, indent=4)
-    # Writing to sample.json
-    with open(os.path.join(output_dir, 'json_metrics.json'), "w") as outfile:
-        outfile.write(json_metrics)
-    scoring(simulator_metrics)
+    try:
+        # save evaluation for scoring program
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+    except Exception as e:
+        print(f"Error creating output directory: {e}")
+
+    try:
+        json_metrics = json.dumps(simulator_metrics, indent=4)
+        print(json_metrics)
+    except Exception as e:
+        print(f"Error converting metrics to JSON: {e}")
+
+    try:
+        # Writing to sample.json
+        with open(os.path.join(output_dir, 'json_metrics.json'), "w") as outfile:
+            outfile.write(json_metrics)
+    except Exception as e:
+        print(f"Error writing JSON metrics to file: {e}")
+
+    try:
+        save_example_simulation(simulator, benchmark)
+    except Exception as e:
+        print(f"Error saving example simulation: {e}")
+
+    try:
+        scoring(simulator_metrics)
+    except Exception as e:
+        print(f"Error scoring simulator metrics: {e}")
 
     print("finished evaluation!\nEvaluation metrics:")
-    print(json_metrics)
     return 0
